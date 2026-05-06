@@ -19,7 +19,7 @@ def session():
 def test_user(session):
     """Register a fresh user (starts with 10 coins, 0 xp = Bronze)."""
     email = f"TEST_{uuid.uuid4().hex[:8]}@revisa.com"
-    password = "Tst-pass-123!"
+    password = os.environ.get("REVISA_TEST_PASSWORD", f"Tst-{uuid.uuid4().hex[:12]}!")
     r = session.post(f"{API}/auth/register",
                      json={"name": "TEST_Tester", "email": email, "password": password})
     assert r.status_code == 200, r.text
@@ -121,10 +121,10 @@ def test_lessons_bronze_only_basico_unlocked(session, auth_headers):
     assert len(lessons) == 4
     # Bronze: only basico level should be unlocked (first lesson of basico)
     by_level = {l["level"]: l for l in lessons}
-    assert by_level["basico"]["unlocked"] is True
-    assert by_level["intermediario"]["unlocked"] is False
-    assert by_level["avancado"]["unlocked"] is False
-    assert by_level["pre_vestibular"]["unlocked"] is False
+    assert by_level["basico"]["unlocked"] == True
+    assert by_level["intermediario"]["unlocked"] == False
+    assert by_level["avancado"]["unlocked"] == False
+    assert by_level["pre_vestibular"]["unlocked"] == False
     # level_label and required_rank
     assert by_level["intermediario"]["required_rank"] == "prata"
     assert "Intermediário" in by_level["intermediario"]["level_label"]
@@ -174,7 +174,7 @@ def test_complete_lesson_perfect_xp_coins(session):
                      json={"lesson_id": basico["id"], "answers": answers})
     assert r.status_code == 200
     res = r.json()
-    assert res["perfect"] is True
+    assert res["perfect"] == True
     assert res["correct"] == len(qs)
     assert res["xp_earned"] == expected_xp, f"xp {res['xp_earned']} vs expected {expected_xp}"
     # coins: 1 per correct + 3 perfect bonus
@@ -198,7 +198,7 @@ def test_complete_lesson_wrong_deducts_lives_no_perfect_bonus(session):
                      json={"lesson_id": basico["id"], "answers": answers})
     assert r.status_code == 200
     res = r.json()
-    assert res["perfect"] is False
+    assert res["perfect"] == False
     assert res["wrong"] == len(qs)
     assert res["new_lives"] < 5
     assert res["coins_earned"] == 0  # 0 correct, no bonus

@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, bcrypt, jwt, uuid, random
+import os, logging, bcrypt, jwt, uuid, secrets
 from pathlib import Path
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
@@ -285,8 +285,8 @@ async def audience_stats(question_id: str, user=Depends(get_current_user)):
     # Generate plausible audience: bias toward correct answer
     correct = q["correct_index"]
     n = len(q["options"])
-    stats = [random.randint(2, 18) for _ in range(n)]
-    stats[correct] += random.randint(35, 55)
+    stats = [secrets.randbelow(17) + 2 for _ in range(n)]  # 2..18
+    stats[correct] += secrets.randbelow(21) + 35           # +35..55
     s = sum(stats)
     pct = [round(x * 100 / s) for x in stats]
     diff = 100 - sum(pct)

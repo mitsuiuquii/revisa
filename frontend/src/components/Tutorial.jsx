@@ -83,8 +83,8 @@ export default function Tutorial({ open, onClose, forceFirstTime }) {
         >
           <div className="flex justify-between items-center mb-4">
             <div className="flex gap-1">
-              {steps.map((_, i) => (
-                <div key={i} className={`h-1.5 rounded-full transition-all ${i === step ? "w-8 bg-violet-500" : i < step ? "w-4 bg-violet-300" : "w-4 bg-slate-200"}`} />
+              {steps.map((stepItem, i) => (
+                <div key={stepItem.title} className={`h-1.5 rounded-full transition-all ${i === step ? "w-8 bg-violet-500" : i < step ? "w-4 bg-violet-300" : "w-4 bg-slate-200"}`} />
               ))}
             </div>
             <button onClick={finish} className="p-1 hover:bg-slate-100 rounded-full" data-testid="tutorial-close">
