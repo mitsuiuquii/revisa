@@ -1,0 +1,133 @@
+{
+  "project_name": "REVISA",
+  "domain": "Gamified Educational SaaS (Mobile Web App)",
+  "target_audience": "Teens 12-18 years old, Brazil (Vestibulares)",
+  "theme_and_archetype": {
+    "theme": "Light",
+    "archetype": "Archetype 6 (Vibrant Play) with Neo-brutalist / Claymorphic tactical influences"
+  },
+  "design_philosophy": {
+    "vibe": "Energetic, tactile, playful, fast, rewarding.",
+    "anti_patterns": [
+      "No cliché purple/violet-to-blue gradients.",
+      "No sterile corporate SaaS layouts.",
+      "Avoid standard flat cards; make interactive elements feel 'pressable'."
+    ],
+    "core_strategy": "Mobile-first experience optimized for touch. Use bold, contrasting elements with thick structural borders. UI must feel like a game rather than a textbook. Immediate visual feedback (color, motion) on every action."
+  },
+  "colors": {
+    "backgrounds": {
+      "app": "#FAFAFA",
+      "card": "#FFFFFF",
+      "overlay": "rgba(15, 23, 42, 0.4)"
+    },
+    "brand": {
+      "primary_navy": "#0F172A",
+      "primary_violet": "#8B5CF6",
+      "violet_hover": "#7C3AED"
+    },
+    "gamification_accents": {
+      "orange_streak": "#F97316",
+      "yellow_xp": "#EAB308",
+      "green_correct": "#22C55E",
+      "red_wrong_life": "#EF4444",
+      "blue_informational": "#3B82F6"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "inverse": "#FFFFFF",
+      "violet_accent": "#8B5CF6"
+    },
+    "borders": {
+      "structural": "#0F172A",
+      "subtle": "#E2E8F0"
+    }
+  },
+  "typography": {
+    "global_rules": {
+      "anti_default": "Do NOT use Inter, Roboto, or Space Grotesk."
+    },
+    "fonts": {
+      "headings": {
+        "family": "'Bricolage Grotesque', sans-serif",
+        "weight": "800 (Black) or 700 (Bold)",
+        "character": "Quirky, highly impactful, teen-friendly.",
+        "usage": "H1, H2, large numbers (XP, Streaks), celebratory banners."
+      },
+      "body": {
+        "family": "'Nunito', sans-serif",
+        "weight": "600 (SemiBold) or 700 (Bold) to maintain chunkiness.",
+        "character": "Rounded, highly legible, friendly.",
+        "usage": "Lesson text, quiz options, UI labels."
+      }
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl tracking-tight leading-tight",
+      "h3": "text-xl font-black",
+      "body": "text-base sm:text-lg",
+      "small_label": "text-sm uppercase tracking-widest font-bold"
+    }
+  },
+  "spacing_and_layout": {
+    "grid_system": "Mobile-first single column, expanding to max-w-md or max-w-lg centered on desktop to mimic mobile app layout (Duolingo style).",
+    "spacing_scale": {
+      "card_padding": "p-6",
+      "section_gap": "gap-8",
+      "element_gap": "gap-4",
+      "bottom_padding": "pb-24 (to account for fixed mobile nav)"
+    },
+    "surfaces": {
+      "tactile_cards": "bg-white border-2 border-slate-900 rounded-3xl shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] transition-transform",
+      "pressed_state": "hover:translate-y-1 hover:shadow-[0px_0px_0px_0px_rgba(15,23,42,1)]"
+    }
+  },
+  "components_strategy": {
+    "global": "Use purely custom HTML/Tailwind for primary layouts. Heavily customize standard shadcn components if used, removing 'Vercel-look'.",
+    "top_bar": "Sticky header. Must contain counters: Hearts (Red), XP (Yellow), Streak Flame (Orange) with heavy font weights and Lucide icons.",
+    "bottom_nav": "Fixed at bottom. Icons + labels. Active state gets a Violet background pill or underline.",
+    "buttons": {
+      "primary": "bg-violet-500 text-white border-b-4 border-violet-700 rounded-2xl py-4 px-6 font-bold text-lg hover:bg-violet-400 hover:border-b-2 hover:translate-y-[2px] active:border-b-0 active:translate-y-[4px] transition-all",
+      "secondary": "bg-white text-slate-900 border-2 border-slate-900 border-b-4 rounded-2xl py-4 px-6 font-bold text-lg hover:bg-slate-50 active:border-b-2 active:translate-y-[2px]"
+    },
+    "quiz_options": {
+      "default": "bg-white border-2 border-slate-300 rounded-2xl p-4 text-center cursor-pointer hover:border-violet-500 hover:bg-violet-50",
+      "selected": "bg-violet-100 border-2 border-violet-500",
+      "correct": "bg-green-100 border-2 border-green-500 text-green-800",
+      "wrong": "bg-red-100 border-2 border-red-500 text-red-800"
+    },
+    "learning_trail": {
+      "design": "Vertical scrolling path. Circular nodes connected by dashed SVGs. Completed nodes are Violet/Green. Current node is pulsing Violet. Locked nodes are Slate-200.",
+      "node": "w-20 h-20 rounded-full flex items-center justify-center border-4"
+    }
+  },
+  "animations": {
+    "library": "framer-motion",
+    "transitions": {
+      "bounce": "type: 'spring', stiffness: 400, damping: 10",
+      "shake": "Used for wrong answers (x-axis keyframes)",
+      "stagger": "List items (quiz options, subjects) must fade in with a staggered delay (0.1s)."
+    },
+    "celebration": "Use canvas-confetti on lesson completion. Scale up XP text momentarily when earned."
+  },
+  "media_urls": {
+    "logo": {
+      "url": "https://customer-assets.emergentagent.com/job_3deef2eb-e33c-4bae-ab9e-1ab16146e6a5/artifacts/durmzo7q_ChatGPT%20Image%206%20de%20mai.%20de%202026%2C%2008_15_49.png",
+      "description": "REVISA Brand Logo",
+      "usage": "Auth screens, Top Nav bar on home page"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage_rules": "Use stroke-width 2.5 or 3 for a chunkier, friendlier look. Colorize strictly based on gamification meaning (e.g., Flame is always Orange)."
+  },
+  "instructions_to_main_agent": [
+    "You MUST implement 'Bricolage Grotesque' via Google Fonts for headings and 'Nunito' for body text.",
+    "Do NOT use generic minimal cards. Everything interactive must have thick borders (border-2 border-slate-900) and hard offset shadows (shadow-[4px_4px_0px_0px_#0F172A]) to create a 'clickable' tactile game feel.",
+    "The UI must be constrained to a mobile layout (max-w-md or max-w-lg mx-auto) on desktop, simulating a mobile app view.",
+    "Implement the 'Learning Trail' on the home page with a vertical zig-zag flex or grid layout, resembling Duolingo's path.",
+    "Include `data-testid` attributes on all buttons, quiz choices, and nav items.",
+    "Ensure quiz interaction gives instant state feedback (green/red) before proceeding to the next question."
+  ]
+}
