@@ -1,17 +1,12 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
-import bcrypt
-import jwt
-import asyncio
+import os, logging, bcrypt, jwt, uuid, random
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-import uuid
 from datetime import datetime, timezone, timedelta, date
 
 ROOT_DIR = Path(__file__).parent
@@ -20,183 +15,202 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
-
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24 * 30
-
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 
 app = FastAPI(title="REVISA API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ============= RANKS =============
+RANKS = [
+    {"id": "bronze",   "name": "Bronze",   "min_xp": 0,    "color": "#A16207", "icon": "Medal"},
+    {"id": "prata",    "name": "Prata",    "min_xp": 200,  "color": "#94A3B8", "icon": "Award"},
+    {"id": "ouro",     "name": "Ouro",     "min_xp": 600,  "color": "#EAB308", "icon": "Trophy"},
+    {"id": "platina",  "name": "Platina",  "min_xp": 1500, "color": "#22D3EE", "icon": "Gem"},
+    {"id": "diamante", "name": "Diamante", "min_xp": 3500, "color": "#60A5FA", "icon": "Diamond"},
+    {"id": "sabio",    "name": "Sábio",    "min_xp": 7000, "color": "#A855F7", "icon": "Crown"},
+]
+LEVEL_RANK_REQUIRED = {"basico": "bronze", "intermediario": "prata", "avancado": "ouro", "pre_vestibular": "platina"}
+LEVEL_LABELS = {"basico": "Básico (6º-9º)", "intermediario": "Intermediário", "avancado": "Avançado", "pre_vestibular": "Pré-Vestibular"}
+DIFFICULTY_XP = {"facil": 5, "medio": 10, "dificil": 15}
+POWER_COST = 15
+POWERS = [
+    {"id": "fifty_fifty", "name": "Universitários", "description": "Elimina 2 alternativas erradas", "icon": "Users", "color": "#3B82F6"},
+    {"id": "skip",        "name": "Pular questão",  "description": "Pula sem penalizar XP",          "icon": "SkipForward", "color": "#F97316"},
+    {"id": "audience",    "name": "Plateia",        "description": "Mostra estatística da plateia",  "icon": "BarChart3",   "color": "#22C55E"},
+]
+
+def rank_for_xp(xp: int):
+    chosen = RANKS[0]
+    for r in RANKS:
+        if xp >= r["min_xp"]:
+            chosen = r
+    return chosen
+
+def rank_index(rank_id: str) -> int:
+    for i, r in enumerate(RANKS):
+        if r["id"] == rank_id: return i
+    return 0
+
+def level_unlocked(level: str, user_rank_id: str) -> bool:
+    needed = LEVEL_RANK_REQUIRED.get(level, "bronze")
+    return rank_index(user_rank_id) >= rank_index(needed)
+
 
 # ============= MODELS =============
 class UserRegister(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-
+    name: str; email: EmailStr; password: str
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-class UserPublic(BaseModel):
-    id: str
-    name: str
-    email: str
-    xp: int = 0
-    lives: int = 5
-    streak: int = 0
-    last_active: Optional[str] = None
-    completed_lessons: List[str] = []
-    achievements: List[str] = []
-    avatar_color: str = "#8B5CF6"
-
-class AuthResponse(BaseModel):
-    token: str
-    user: UserPublic
-
+    email: EmailStr; password: str
 class QuestionAnswer(BaseModel):
-    question_id: str
-    selected_index: int
-
+    question_id: str; selected_index: int
 class CompleteLessonRequest(BaseModel):
-    lesson_id: str
-    answers: List[QuestionAnswer]
-
+    lesson_id: str; answers: List[QuestionAnswer]; power_used: Optional[str] = None
 class AIQuestionRequest(BaseModel):
-    subject: str
-    difficulty: str = "medio"
-
+    subject: str; difficulty: str = "medio"
+class UsePowerRequest(BaseModel):
+    power_id: str
 
 # ============= HELPERS =============
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-
-def create_token(user_id: str) -> str:
-    payload = {
-        "sub": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+def hash_password(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
+def verify_password(p, h): return bcrypt.checkpw(p.encode(), h.encode())
+def create_token(uid):
+    return jwt.encode({"sub": uid, "exp": datetime.now(timezone.utc) + timedelta(days=30)}, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("sub")
+        uid = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]).get("sub")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
-    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+    user = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+    if not user: raise HTTPException(status_code=401, detail="Usuário não encontrado")
     return user
 
-def public_user(user: dict) -> UserPublic:
-    return UserPublic(
-        id=user["id"], name=user["name"], email=user["email"],
-        xp=user.get("xp", 0), lives=user.get("lives", 5),
-        streak=user.get("streak", 0), last_active=user.get("last_active"),
-        completed_lessons=user.get("completed_lessons", []),
-        achievements=user.get("achievements", []),
-        avatar_color=user.get("avatar_color", "#8B5CF6"),
-    )
+def public_user(u: dict) -> dict:
+    rank = rank_for_xp(u.get("xp", 0))
+    return {
+        "id": u["id"], "name": u["name"], "email": u["email"],
+        "xp": u.get("xp", 0), "lives": u.get("lives", 5), "streak": u.get("streak", 0),
+        "coins": u.get("coins", 0), "rank": rank,
+        "last_active": u.get("last_active"),
+        "completed_lessons": u.get("completed_lessons", []),
+        "achievements": u.get("achievements", []),
+        "avatar_color": u.get("avatar_color", "#8B5CF6"),
+    }
 
 
 # ============= AUTH =============
-@api_router.post("/auth/register", response_model=AuthResponse)
+@api_router.post("/auth/register")
 async def register(data: UserRegister):
-    existing = await db.users.find_one({"email": data.email.lower()})
-    if existing:
+    if await db.users.find_one({"email": data.email.lower()}):
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
-    user_id = str(uuid.uuid4())
+    uid = str(uuid.uuid4())
     colors = ["#8B5CF6", "#F97316", "#EAB308", "#22C55E", "#EF4444", "#3B82F6"]
-    user_doc = {
-        "id": user_id, "name": data.name, "email": data.email.lower(),
+    doc = {
+        "id": uid, "name": data.name, "email": data.email.lower(),
         "password_hash": hash_password(data.password),
-        "xp": 0, "lives": 5, "streak": 0, "last_active": None,
+        "xp": 0, "lives": 5, "streak": 0, "coins": 10, "last_active": None,
         "completed_lessons": [], "achievements": [],
-        "avatar_color": colors[hash(user_id) % len(colors)],
+        "avatar_color": colors[hash(uid) % len(colors)],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user_doc)
-    return AuthResponse(token=create_token(user_id), user=public_user(user_doc))
+    await db.users.insert_one(doc)
+    return {"token": create_token(uid), "user": public_user(doc)}
 
-@api_router.post("/auth/login", response_model=AuthResponse)
+@api_router.post("/auth/login")
 async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.email.lower()})
-    if not user or not verify_password(data.password, user["password_hash"]):
+    u = await db.users.find_one({"email": data.email.lower()})
+    if not u or not verify_password(data.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos")
-    return AuthResponse(token=create_token(user["id"]), user=public_user(user))
+    return {"token": create_token(u["id"]), "user": public_user(u)}
 
-@api_router.get("/auth/me", response_model=UserPublic)
+@api_router.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return public_user(user)
 
 
-# ============= SUBJECTS & LESSONS =============
+# ============= META =============
+@api_router.get("/meta/ranks")
+async def meta_ranks():
+    return {"ranks": RANKS, "level_required": LEVEL_RANK_REQUIRED, "level_labels": LEVEL_LABELS,
+            "difficulty_xp": DIFFICULTY_XP, "powers": POWERS, "power_cost": POWER_COST}
+
+
+# ============= SUBJECTS =============
 @api_router.get("/subjects")
 async def list_subjects(user=Depends(get_current_user)):
     subjects = await db.subjects.find({}, {"_id": 0}).sort("order", 1).to_list(100)
     completed = set(user.get("completed_lessons", []))
     for s in subjects:
         lessons = await db.lessons.find({"subject_id": s["id"]}, {"_id": 0, "id": 1}).to_list(100)
-        total = len(lessons)
-        done = sum(1 for l in lessons if l["id"] in completed)
-        s["total_lessons"] = total
-        s["completed_lessons"] = done
-        s["progress"] = int((done / total) * 100) if total else 0
+        s["total_lessons"] = len(lessons)
+        s["completed_lessons"] = sum(1 for l in lessons if l["id"] in completed)
+        s["progress"] = int((s["completed_lessons"] / s["total_lessons"]) * 100) if s["total_lessons"] else 0
     return subjects
 
 @api_router.get("/subjects/{subject_id}/lessons")
 async def list_lessons(subject_id: str, user=Depends(get_current_user)):
     subject = await db.subjects.find_one({"id": subject_id}, {"_id": 0})
-    if not subject:
-        raise HTTPException(status_code=404, detail="Matéria não encontrada")
+    if not subject: raise HTTPException(status_code=404, detail="Matéria não encontrada")
     lessons = await db.lessons.find({"subject_id": subject_id}, {"_id": 0}).sort("order", 1).to_list(100)
     completed = set(user.get("completed_lessons", []))
+    user_rank = rank_for_xp(user.get("xp", 0))["id"]
+    # Group by level, lessons unlock progressively within a level if level itself is unlocked
     for i, l in enumerate(lessons):
         l["completed"] = l["id"] in completed
-        # Lesson is unlocked if previous one completed (or first lesson)
-        l["unlocked"] = i == 0 or lessons[i-1]["id"] in completed
+        lvl_ok = level_unlocked(l.get("level", "basico"), user_rank)
+        prev_done = i == 0 or lessons[i-1]["id"] in completed or lessons[i-1].get("level") != l.get("level")
+        l["unlocked"] = lvl_ok and prev_done
+        l["level_label"] = LEVEL_LABELS.get(l.get("level", "basico"), l.get("level"))
+        l["required_rank"] = LEVEL_RANK_REQUIRED.get(l.get("level", "basico"), "bronze")
     return {"subject": subject, "lessons": lessons}
 
 @api_router.get("/lessons/{lesson_id}")
 async def get_lesson(lesson_id: str, user=Depends(get_current_user)):
     lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lição não encontrada")
+    if not lesson: raise HTTPException(status_code=404, detail="Lição não encontrada")
+    user_rank = rank_for_xp(user.get("xp", 0))["id"]
+    if not level_unlocked(lesson.get("level", "basico"), user_rank):
+        raise HTTPException(status_code=403, detail=f"Lição requer patente {LEVEL_RANK_REQUIRED.get(lesson.get('level'), 'bronze').title()}")
     questions = await db.questions.find({"lesson_id": lesson_id}, {"_id": 0}).sort("order", 1).to_list(100)
-    # Don't expose correct_index to frontend - oh wait, we need it for instant feedback. 
-    # We'll keep it; it's fine for an MVP educational app.
     return {"lesson": lesson, "questions": questions}
 
+
+# ============= COMPLETE LESSON =============
 @api_router.post("/lessons/complete")
 async def complete_lesson(req: CompleteLessonRequest, user=Depends(get_current_user)):
     lesson = await db.lessons.find_one({"id": req.lesson_id}, {"_id": 0})
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lição não encontrada")
+    if not lesson: raise HTTPException(status_code=404, detail="Lição não encontrada")
     questions = await db.questions.find({"lesson_id": req.lesson_id}, {"_id": 0}).to_list(100)
     q_map = {q["id"]: q for q in questions}
-    correct_count = 0
-    wrong_count = 0
+
+    correct = 0; wrong = 0; xp_earned = 0
     for ans in req.answers:
         q = q_map.get(ans.question_id)
-        if q and ans.selected_index == q["correct_index"]:
-            correct_count += 1
+        if not q: continue
+        diff_xp = DIFFICULTY_XP.get(q.get("difficulty", "medio"), 10)
+        if ans.selected_index == -1:  # skipped via power
+            continue
+        if ans.selected_index == q["correct_index"]:
+            correct += 1
+            xp_earned += diff_xp
         else:
-            wrong_count += 1
-    total = len(questions)
-    xp_earned = correct_count * 10
-    perfect = correct_count == total
-    if perfect:
-        xp_earned += 5
+            wrong += 1
 
-    # Streak update
+    total = len(questions)
+    accuracy = (correct / total) if total else 0
+    if accuracy >= 1.0: xp_earned += 20  # gabarito bonus
+    elif accuracy >= 0.8: xp_earned += 10
+    elif accuracy >= 0.5: xp_earned += 5
+
+    perfect = correct == total
+    coins_earned = correct + (3 if perfect else 0)
+
     today = date.today().isoformat()
     last_active = user.get("last_active")
     new_streak = user.get("streak", 0)
@@ -207,76 +221,99 @@ async def complete_lesson(req: CompleteLessonRequest, user=Depends(get_current_u
         else:
             new_streak = 1
 
-    # Lives update (deduct lives for wrong answers, min 0)
-    new_lives = max(0, user.get("lives", 5) - wrong_count)
-
+    new_lives = max(0, user.get("lives", 5) - wrong)
     completed_set = set(user.get("completed_lessons", []))
-    is_first_completion = req.lesson_id not in completed_set
-    if is_first_completion:
+    if req.lesson_id not in completed_set:
         completed_set.add(req.lesson_id)
 
-    # Achievements
+    new_xp = user.get("xp", 0) + xp_earned
+    new_coins = user.get("coins", 0) + coins_earned
+    old_rank = rank_for_xp(user.get("xp", 0))
+    new_rank = rank_for_xp(new_xp)
+    rank_up = new_rank["id"] != old_rank["id"]
+
     achievements = list(user.get("achievements", []))
     new_achievements = []
-    all_achievements = await db.achievements.find({}, {"_id": 0}).to_list(100)
-    new_xp = user.get("xp", 0) + xp_earned
-    new_completed_count = len(completed_set)
-    
-    for ach in all_achievements:
-        if ach["id"] in achievements:
-            continue
-        unlocked = False
-        atype = ach["type"]
-        threshold = ach["threshold"]
-        if atype == "lessons" and new_completed_count >= threshold:
-            unlocked = True
-        elif atype == "xp" and new_xp >= threshold:
-            unlocked = True
-        elif atype == "streak" and new_streak >= threshold:
-            unlocked = True
-        elif atype == "perfect" and perfect:
-            unlocked = True
+    for ach in await db.achievements.find({}, {"_id": 0}).to_list(100):
+        if ach["id"] in achievements: continue
+        t, th = ach["type"], ach["threshold"]
+        unlocked = (
+            (t == "lessons" and len(completed_set) >= th) or
+            (t == "xp" and new_xp >= th) or
+            (t == "streak" and new_streak >= th) or
+            (t == "perfect" and perfect) or
+            (t == "rank" and rank_index(new_rank["id"]) >= th)
+        )
         if unlocked:
             achievements.append(ach["id"])
             new_achievements.append(ach)
 
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {
-            "xp": new_xp, "lives": new_lives, "streak": new_streak,
-            "last_active": today, "completed_lessons": list(completed_set),
-            "achievements": achievements,
-        }}
-    )
+    await db.users.update_one({"id": user["id"]}, {"$set": {
+        "xp": new_xp, "lives": new_lives, "streak": new_streak, "coins": new_coins,
+        "last_active": today, "completed_lessons": list(completed_set),
+        "achievements": achievements,
+    }})
     return {
-        "correct": correct_count, "wrong": wrong_count, "total": total,
-        "xp_earned": xp_earned, "perfect": perfect,
-        "new_xp": new_xp, "new_lives": new_lives, "new_streak": new_streak,
+        "correct": correct, "wrong": wrong, "total": total,
+        "xp_earned": xp_earned, "coins_earned": coins_earned, "perfect": perfect,
+        "accuracy": int(accuracy * 100),
+        "new_xp": new_xp, "new_lives": new_lives, "new_streak": new_streak, "new_coins": new_coins,
         "new_achievements": new_achievements,
+        "rank_up": rank_up, "new_rank": new_rank, "old_rank": old_rank,
     }
 
 
-# ============= ACHIEVEMENTS =============
+# ============= POWERS =============
+@api_router.post("/powers/use")
+async def use_power(req: UsePowerRequest, user=Depends(get_current_user)):
+    if req.power_id not in [p["id"] for p in POWERS]:
+        raise HTTPException(status_code=400, detail="Habilidade inválida")
+    if user.get("coins", 0) < POWER_COST:
+        raise HTTPException(status_code=400, detail="Moedas insuficientes")
+    new_coins = user.get("coins", 0) - POWER_COST
+    await db.users.update_one({"id": user["id"]}, {"$set": {"coins": new_coins}})
+    payload = {"power_id": req.power_id, "new_coins": new_coins}
+    if req.power_id == "audience":
+        # Caller will pass question via query? Use a separate endpoint instead.
+        pass
+    return payload
+
+@api_router.get("/powers/audience/{question_id}")
+async def audience_stats(question_id: str, user=Depends(get_current_user)):
+    q = await db.questions.find_one({"id": question_id}, {"_id": 0})
+    if not q: raise HTTPException(status_code=404, detail="Questão não encontrada")
+    # Generate plausible audience: bias toward correct answer
+    correct = q["correct_index"]
+    n = len(q["options"])
+    stats = [random.randint(2, 18) for _ in range(n)]
+    stats[correct] += random.randint(35, 55)
+    s = sum(stats)
+    pct = [round(x * 100 / s) for x in stats]
+    diff = 100 - sum(pct)
+    pct[correct] += diff  # rebalance
+    return {"percentages": pct}
+
+
+# ============= ACHIEVEMENTS / LEADERBOARD =============
 @api_router.get("/achievements")
 async def list_achievements(user=Depends(get_current_user)):
-    achievements = await db.achievements.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    items = await db.achievements.find({}, {"_id": 0}).sort("order", 1).to_list(100)
     unlocked = set(user.get("achievements", []))
-    for a in achievements:
+    for a in items:
         a["unlocked"] = a["id"] in unlocked
-    return achievements
+    return items
 
-
-# ============= LEADERBOARD =============
 @api_router.get("/leaderboard")
 async def leaderboard(user=Depends(get_current_user)):
-    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "xp": 1, "streak": 1, "avatar_color": 1}).sort("xp", -1).limit(50).to_list(50)
+    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "xp": 1, "streak": 1, "avatar_color": 1, "coins": 1}).sort("xp", -1).limit(50).to_list(50)
     for i, u in enumerate(users):
-        u["rank"] = i + 1
+        u["rank_position"] = i + 1
         u["is_me"] = u["id"] == user["id"]
+        u["tier"] = rank_for_xp(u.get("xp", 0))
     return users
 
 
-# ============= AI PRACTICE =============
+# ============= AI =============
 @api_router.post("/practice/ai")
 async def ai_question(req: AIQuestionRequest, user=Depends(get_current_user)):
     if not EMERGENT_LLM_KEY:
@@ -284,180 +321,287 @@ async def ai_question(req: AIQuestionRequest, user=Depends(get_current_user)):
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         import json as json_lib
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"ai-{user['id']}-{uuid.uuid4()}",
-            system_message=(
-                "Você é um professor brasileiro especialista em vestibular (ENEM/FUVEST). "
-                "Crie questões de múltipla escolha em português, exatamente como pedido. "
-                "SEMPRE retorne APENAS JSON válido, sem markdown nem texto extra."
-            ),
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"ai-{user['id']}-{uuid.uuid4()}",
+            system_message=("Você é um professor brasileiro de vestibular (ENEM/FUVEST). "
+                "Crie questões de múltipla escolha em português. Retorne APENAS JSON, sem markdown.")
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        prompt = (
-            f"Crie 1 questão de múltipla escolha sobre {req.subject}, dificuldade {req.difficulty}, "
-            "para alunos de 12-18 anos preparando vestibular. "
-            "Retorne JSON neste formato exato: "
-            '{"prompt":"enunciado curto e claro","options":["a","b","c","d"],"correct_index":0,"explanation":"explicação curta"}'
-        )
+        prompt = (f"Questão de {req.subject}, dificuldade {req.difficulty}, estilo ENEM/FUVEST. "
+            'Retorne JSON: {"prompt":"...","options":["a","b","c","d"],"correct_index":0,"explanation":"..."}')
         response = await chat.send_message(UserMessage(text=prompt))
-        text = response.strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.startswith("json"):
-                text = text[4:]
-            text = text.strip()
+        text = response.strip().strip("`")
+        if text.startswith("json"): text = text[4:].strip()
         data = json_lib.loads(text)
-        return {
-            "id": str(uuid.uuid4()),
-            "prompt": data["prompt"],
-            "options": data["options"],
-            "correct_index": int(data["correct_index"]),
-            "explanation": data.get("explanation", ""),
-        }
+        return {"id": str(uuid.uuid4()), "prompt": data["prompt"], "options": data["options"],
+                "correct_index": int(data["correct_index"]), "explanation": data.get("explanation", ""),
+                "difficulty": req.difficulty}
     except Exception as e:
-        logger.exception("AI question error")
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar questão: {str(e)}")
+        logger.exception("AI error")
+        raise HTTPException(status_code=500, detail=f"Erro: {e}")
 
 
-# ============= LIVES REGEN =============
 @api_router.post("/lives/refill")
-async def refill_lives(user=Depends(get_current_user)):
+async def refill(user=Depends(get_current_user)):
     await db.users.update_one({"id": user["id"]}, {"$set": {"lives": 5}})
     return {"lives": 5}
 
-
-# ============= HEALTH =============
 @api_router.get("/")
-async def root():
-    return {"message": "REVISA API"}
+async def root(): return {"message": "REVISA API"}
 
 
-# ============= SEED DATA =============
+# ============= SEED =============
 SUBJECTS_SEED = [
-    {"name": "Matemática", "icon": "Calculator", "color": "#3B82F6", "description": "Funções, geometria, álgebra"},
-    {"name": "Português", "icon": "BookOpen", "color": "#22C55E", "description": "Gramática e interpretação"},
-    {"name": "História", "icon": "Landmark", "color": "#F97316", "description": "Brasil e mundo"},
-    {"name": "Geografia", "icon": "Globe", "color": "#06B6D4", "description": "Física e humana"},
-    {"name": "Biologia", "icon": "Leaf", "color": "#10B981", "description": "Vida e ecologia"},
-    {"name": "Química", "icon": "FlaskConical", "color": "#8B5CF6", "description": "Orgânica e inorgânica"},
-    {"name": "Física", "icon": "Atom", "color": "#EF4444", "description": "Mecânica e ondas"},
-    {"name": "Literatura", "icon": "BookMarked", "color": "#EC4899", "description": "Movimentos literários"},
-    {"name": "Inglês", "icon": "Languages", "color": "#EAB308", "description": "Reading e gramática"},
-    {"name": "Redação", "icon": "PenLine", "color": "#64748B", "description": "Estrutura dissertativa"},
+    {"name": "Matemática", "icon": "Calculator",   "color": "#3B82F6", "description": "Funções, geometria, álgebra"},
+    {"name": "Biologia",   "icon": "Leaf",         "color": "#86EFAC", "description": "Citologia, genética, ecologia"},
+    {"name": "Geografia",  "icon": "Globe",        "color": "#A855F7", "description": "Física e humana"},
+    {"name": "História",   "icon": "Landmark",     "color": "#EF4444", "description": "Brasil e mundo"},
+    {"name": "Português",  "icon": "BookOpen",     "color": "#F97316", "description": "Gramática e interpretação"},
+    {"name": "Química",    "icon": "FlaskConical", "color": "#84CC16", "description": "Orgânica e inorgânica"},
+    {"name": "Física",     "icon": "Atom",         "color": "#1E40AF", "description": "Mecânica, ondas, eletricidade"},
+    {"name": "Literatura", "icon": "BookMarked",   "color": "#EC4899", "description": "Movimentos literários"},
+    {"name": "Inglês",     "icon": "Languages",    "color": "#FACC15", "description": "Reading e gramática"},
 ]
 
-LESSONS_SEED = {
-    "Matemática": [
-        {"title": "Funções do 1º grau", "questions": [
-            {"prompt": "Qual o valor de f(2) na função f(x) = 3x + 1?", "options": ["5", "6", "7", "8"], "correct_index": 2, "explanation": "f(2) = 3·2 + 1 = 7"},
-            {"prompt": "A reta y = 2x − 4 intercepta o eixo X em qual ponto?", "options": ["(0, -4)", "(2, 0)", "(-2, 0)", "(4, 0)"], "correct_index": 1, "explanation": "Quando y = 0: 2x − 4 = 0 → x = 2"},
-            {"prompt": "Qual o coeficiente angular da reta y = -3x + 5?", "options": ["5", "-3", "3", "-5"], "correct_index": 1, "explanation": "Na forma y = ax + b, a é o coeficiente angular"},
-            {"prompt": "Se f(x) = 2x + 7, quanto vale f(0)?", "options": ["0", "2", "7", "9"], "correct_index": 2, "explanation": "f(0) = 2·0 + 7 = 7"},
-            {"prompt": "Função crescente possui coeficiente angular:", "options": ["Negativo", "Zero", "Positivo", "Indefinido"], "correct_index": 2, "explanation": "Coeficiente angular > 0 indica crescimento"},
-        ]},
-        {"title": "Equações do 2º grau", "questions": [
-            {"prompt": "As raízes de x² − 5x + 6 = 0 são:", "options": ["1 e 6", "2 e 3", "-2 e -3", "0 e 5"], "correct_index": 1, "explanation": "Por Bhaskara ou soma/produto: 2 e 3"},
-            {"prompt": "Qual o discriminante de x² + 4x + 4 = 0?", "options": ["0", "4", "8", "16"], "correct_index": 0, "explanation": "Δ = b² − 4ac = 16 − 16 = 0"},
-            {"prompt": "Quantas raízes reais tem x² + 1 = 0?", "options": ["0", "1", "2", "Infinitas"], "correct_index": 0, "explanation": "Δ = -4 < 0, não há raízes reais"},
-            {"prompt": "Soma das raízes de x² − 7x + 10 = 0:", "options": ["7", "-7", "10", "3"], "correct_index": 0, "explanation": "Soma = -b/a = 7"},
-            {"prompt": "Produto das raízes de x² − 2x − 8 = 0:", "options": ["-2", "8", "-8", "2"], "correct_index": 2, "explanation": "Produto = c/a = -8"},
-        ]},
-        {"title": "Geometria plana", "questions": [
-            {"prompt": "A área de um quadrado de lado 5 é:", "options": ["10", "20", "25", "30"], "correct_index": 2, "explanation": "Área = lado² = 25"},
-            {"prompt": "Soma dos ângulos internos de um triângulo:", "options": ["90°", "180°", "270°", "360°"], "correct_index": 1, "explanation": "Sempre 180°"},
-            {"prompt": "Perímetro de retângulo 6×4 cm:", "options": ["10 cm", "20 cm", "24 cm", "12 cm"], "correct_index": 1, "explanation": "P = 2(6+4) = 20"},
-            {"prompt": "Área do círculo de raio 3 (use π≈3,14):", "options": ["18,84", "28,26", "9,42", "6,28"], "correct_index": 1, "explanation": "A = πr² = 3,14·9 ≈ 28,26"},
-            {"prompt": "Triângulo equilátero tem ângulos de:", "options": ["45°", "60°", "90°", "120°"], "correct_index": 1, "explanation": "Cada ângulo = 60°"},
-        ]},
-    ],
-    "Português": [
-        {"title": "Classes de palavras", "questions": [
-            {"prompt": "Em 'O cachorro corre rápido', 'rápido' é:", "options": ["Substantivo", "Adjetivo", "Advérbio", "Verbo"], "correct_index": 2, "explanation": "Modifica o verbo 'corre' (modo)"},
-            {"prompt": "A palavra 'felicidade' é um:", "options": ["Adjetivo", "Substantivo", "Verbo", "Pronome"], "correct_index": 1, "explanation": "Nomeia uma qualidade abstrata"},
-            {"prompt": "'Eles vão à escola' — 'eles' é:", "options": ["Substantivo", "Pronome pessoal", "Adjetivo", "Numeral"], "correct_index": 1, "explanation": "Pronome pessoal do caso reto"},
-            {"prompt": "Qual destas é uma conjunção?", "options": ["mas", "casa", "veloz", "três"], "correct_index": 0, "explanation": "Conjunção adversativa"},
-            {"prompt": "'Bonito' é um(a):", "options": ["Substantivo", "Verbo", "Adjetivo", "Advérbio"], "correct_index": 2, "explanation": "Caracteriza um substantivo"},
-        ]},
-        {"title": "Crase", "questions": [
-            {"prompt": "Marque a alternativa correta:", "options": ["Vou à escola", "Vou a escola", "Vou à a escola", "Vou as escola"], "correct_index": 0, "explanation": "Crase obrigatória antes de palavra feminina determinada"},
-            {"prompt": "Quando NUNCA usamos crase?", "options": ["Antes de feminino", "Antes de verbo", "Antes de 'aquela'", "Em horas"], "correct_index": 1, "explanation": "Antes de verbo, nunca há crase"},
-            {"prompt": "Está correto:", "options": ["Refiro-me à você", "Refiro-me a você", "Refiro-me às você", "Refiro-me a a você"], "correct_index": 1, "explanation": "Antes de pronome pessoal não há crase"},
-            {"prompt": "Qual está com crase correta?", "options": ["Cheguei à Brasil", "Cheguei a Brasília", "Vou à Roma", "Daqui à pouco"], "correct_index": 1, "explanation": "Brasília aceita 'a' simples; locais sem artigo não recebem crase"},
-            {"prompt": "Em 'Das 8 ___ 10h':", "options": ["a", "à", "ah", "há"], "correct_index": 1, "explanation": "Crase em horas determinadas"},
-        ]},
-    ],
-    "História": [
-        {"title": "Brasil Colônia", "questions": [
-            {"prompt": "O Brasil foi descoberto em:", "options": ["1492", "1500", "1510", "1530"], "correct_index": 1, "explanation": "Pedro Álvares Cabral, 22 de abril de 1500"},
-            {"prompt": "Capitanias hereditárias foram criadas por:", "options": ["D. João VI", "D. Pedro I", "D. João III", "Tomé de Sousa"], "correct_index": 2, "explanation": "Por D. João III em 1534"},
-            {"prompt": "Principal produto da economia colonial inicial:", "options": ["Ouro", "Açúcar", "Café", "Borracha"], "correct_index": 1, "explanation": "Ciclo do açúcar no Nordeste"},
-            {"prompt": "Inconfidência Mineira ocorreu em:", "options": ["1789", "1808", "1822", "1750"], "correct_index": 0, "explanation": "Movimento de 1789 contra a Coroa"},
-            {"prompt": "Líder da Inconfidência Mineira:", "options": ["José Bonifácio", "Tiradentes", "D. Pedro II", "Zumbi"], "correct_index": 1, "explanation": "Joaquim José da Silva Xavier"},
-        ]},
-    ],
-    "Geografia": [
-        {"title": "Geografia do Brasil", "questions": [
-            {"prompt": "Capital do Brasil:", "options": ["São Paulo", "Rio de Janeiro", "Brasília", "Salvador"], "correct_index": 2, "explanation": "Brasília, capital desde 1960"},
-            {"prompt": "Maior bioma brasileiro:", "options": ["Cerrado", "Amazônia", "Caatinga", "Pantanal"], "correct_index": 1, "explanation": "Floresta Amazônica"},
-            {"prompt": "Estado mais populoso do Brasil:", "options": ["RJ", "MG", "SP", "BA"], "correct_index": 2, "explanation": "São Paulo é o mais populoso"},
-            {"prompt": "Rio mais extenso do Brasil:", "options": ["São Francisco", "Amazonas", "Paraná", "Tocantins"], "correct_index": 1, "explanation": "Rio Amazonas"},
-            {"prompt": "Região com a Caatinga:", "options": ["Norte", "Nordeste", "Sul", "Sudeste"], "correct_index": 1, "explanation": "Bioma típico do sertão nordestino"},
-        ]},
-    ],
-    "Biologia": [
-        {"title": "Citologia", "questions": [
-            {"prompt": "A 'usina de energia' da célula é:", "options": ["Núcleo", "Mitocôndria", "Ribossomo", "Lisossomo"], "correct_index": 1, "explanation": "Mitocôndrias produzem ATP"},
-            {"prompt": "Onde ocorre a fotossíntese?", "options": ["Mitocôndria", "Cloroplasto", "Núcleo", "Vacúolo"], "correct_index": 1, "explanation": "Nos cloroplastos das células vegetais"},
-            {"prompt": "Material genético está no:", "options": ["Citoplasma", "Núcleo", "Membrana", "Parede"], "correct_index": 1, "explanation": "DNA no núcleo (eucariotos)"},
-            {"prompt": "Ribossomos produzem:", "options": ["Lipídios", "Proteínas", "ATP", "DNA"], "correct_index": 1, "explanation": "Síntese proteica"},
-            {"prompt": "Célula vegetal tem, célula animal não:", "options": ["Mitocôndria", "Núcleo", "Parede celular", "Ribossomo"], "correct_index": 2, "explanation": "Parede celular de celulose"},
-        ]},
-    ],
-    "Química": [
-        {"title": "Tabela periódica", "questions": [
-            {"prompt": "Símbolo do sódio:", "options": ["S", "So", "Na", "N"], "correct_index": 2, "explanation": "Na (do latim Natrium)"},
-            {"prompt": "Número atômico do hidrogênio:", "options": ["0", "1", "2", "8"], "correct_index": 1, "explanation": "H tem Z=1"},
-            {"prompt": "Gás nobre:", "options": ["O₂", "He", "Cl", "Na"], "correct_index": 1, "explanation": "Hélio é gás nobre"},
-            {"prompt": "Família 1A são:", "options": ["Halogênios", "Metais alcalinos", "Gases nobres", "Calcogênios"], "correct_index": 1, "explanation": "Li, Na, K, Rb, Cs, Fr"},
-            {"prompt": "Símbolo do ouro:", "options": ["Ag", "Au", "Or", "Go"], "correct_index": 1, "explanation": "Au (Aurum)"},
-        ]},
-    ],
-    "Física": [
-        {"title": "Cinemática", "questions": [
-            {"prompt": "Velocidade média = ?", "options": ["d × t", "d / t", "t / d", "d + t"], "correct_index": 1, "explanation": "Vm = Δs / Δt"},
-            {"prompt": "Unidade de velocidade no SI:", "options": ["km/h", "m/s", "cm/s", "mph"], "correct_index": 1, "explanation": "metros por segundo"},
-            {"prompt": "Aceleração da gravidade ≈:", "options": ["5 m/s²", "9,8 m/s²", "20 m/s²", "100 m/s²"], "correct_index": 1, "explanation": "g ≈ 9,8 m/s²"},
-            {"prompt": "MRU significa:", "options": ["Movimento Retilíneo Uniforme", "Movimento Rápido Único", "Massa Real Uniforme", "Maior Raio Útil"], "correct_index": 0, "explanation": "Velocidade constante"},
-            {"prompt": "Em queda livre, desprezando o ar, todos os corpos:", "options": ["Caem com velocidades diferentes", "Caem com mesma aceleração", "Não caem", "Sobem"], "correct_index": 1, "explanation": "Aceleração g é a mesma"},
-        ]},
-    ],
-    "Literatura": [
-        {"title": "Movimentos literários", "questions": [
-            {"prompt": "Machado de Assis pertence ao:", "options": ["Romantismo", "Realismo", "Modernismo", "Barroco"], "correct_index": 1, "explanation": "Mestre do Realismo brasileiro"},
-            {"prompt": "Semana de Arte Moderna ocorreu em:", "options": ["1900", "1910", "1922", "1945"], "correct_index": 2, "explanation": "São Paulo, 1922"},
-            {"prompt": "Autor de 'Os Sertões':", "options": ["Machado", "Euclides da Cunha", "Drummond", "Clarice"], "correct_index": 1, "explanation": "Euclides da Cunha (1902)"},
-            {"prompt": "Iracema é obra de:", "options": ["José de Alencar", "Castro Alves", "Bilac", "Drummond"], "correct_index": 0, "explanation": "Romantismo indianista"},
-            {"prompt": "Drummond foi:", "options": ["Romântico", "Modernista", "Barroco", "Árcade"], "correct_index": 1, "explanation": "Geração de 1930"},
-        ]},
-    ],
-    "Inglês": [
-        {"title": "Verb to be", "questions": [
-            {"prompt": "I ___ a student.", "options": ["am", "is", "are", "be"], "correct_index": 0, "explanation": "I + am"},
-            {"prompt": "She ___ happy.", "options": ["am", "is", "are", "be"], "correct_index": 1, "explanation": "She + is"},
-            {"prompt": "They ___ from Brazil.", "options": ["am", "is", "are", "be"], "correct_index": 2, "explanation": "They + are"},
-            {"prompt": "Past of 'is':", "options": ["was", "were", "been", "being"], "correct_index": 0, "explanation": "Singular passado: was"},
-            {"prompt": "'You are' contraction:", "options": ["You's", "You're", "You're'", "Youre"], "correct_index": 1, "explanation": "you + are = you're"},
-        ]},
-    ],
-    "Redação": [
-        {"title": "Estrutura dissertativa", "questions": [
-            {"prompt": "A estrutura básica de uma dissertação é:", "options": ["Início, fim", "Introdução, desenvolvimento, conclusão", "Tese, antítese", "Personagens, enredo"], "correct_index": 1, "explanation": "Modelo clássico"},
-            {"prompt": "Tese é apresentada na:", "options": ["Conclusão", "Desenvolvimento", "Introdução", "Bibliografia"], "correct_index": 2, "explanation": "Posicionamento na introdução"},
-            {"prompt": "ENEM exige proposta de intervenção em qual parte?", "options": ["Introdução", "Desenvolvimento", "Conclusão", "Título"], "correct_index": 2, "explanation": "Critério da Competência V"},
-            {"prompt": "Tipo textual da redação ENEM:", "options": ["Narrativo", "Descritivo", "Dissertativo-argumentativo", "Injuntivo"], "correct_index": 2, "explanation": "Texto opinativo com argumentos"},
-            {"prompt": "Conectivo de oposição:", "options": ["Portanto", "Entretanto", "Pois", "Assim"], "correct_index": 1, "explanation": "Adversativo"},
-        ]},
-    ],
+# Compact seed: each subject gets 4 lessons (one per level), each lesson 4 questions
+def gen_questions(subject_name, level):
+    """Returns list of 4 questions per (subject, level)."""
+    bank = QUESTION_BANK.get(subject_name, {}).get(level, [])
+    return bank
+
+QUESTION_BANK = {
+    "Matemática": {
+        "basico": [
+            {"prompt": "Quanto é 7 × 8?", "options": ["54", "56", "58", "64"], "correct_index": 1, "difficulty": "facil", "explanation": "7×8=56"},
+            {"prompt": "Qual fração equivale a 0,5?", "options": ["1/4", "1/2", "1/3", "2/3"], "correct_index": 1, "difficulty": "facil", "explanation": "0,5 = 1/2"},
+            {"prompt": "Resolva: 25 − 7 + 3", "options": ["15", "21", "23", "29"], "correct_index": 1, "difficulty": "facil", "explanation": "18+3=21"},
+            {"prompt": "Quanto é 12² ?", "options": ["120", "144", "124", "168"], "correct_index": 1, "difficulty": "medio", "explanation": "12·12=144"},
+        ],
+        "intermediario": [
+            {"prompt": "f(x)=2x+3, f(5)=?", "options": ["10","13","11","15"], "correct_index": 1, "difficulty": "medio", "explanation": "2·5+3=13"},
+            {"prompt": "Raízes de x²−5x+6=0:", "options": ["1 e 6","2 e 3","-2 e -3","0 e 5"], "correct_index": 1, "difficulty": "medio", "explanation": "Soma=5, produto=6 → 2 e 3"},
+            {"prompt": "Área de quadrado lado 7:", "options": ["14","21","49","56"], "correct_index": 2, "difficulty": "facil", "explanation": "7²=49"},
+            {"prompt": "Razão entre 12 e 18:", "options": ["1/2","2/3","3/4","3/5"], "correct_index": 1, "difficulty": "medio", "explanation": "12/18 = 2/3"},
+        ],
+        "avancado": [
+            {"prompt": "log₁₀(1000) = ?", "options": ["1","2","3","10"], "correct_index": 2, "difficulty": "medio", "explanation": "10³=1000"},
+            {"prompt": "Sen(30°) =", "options": ["1/2","√3/2","√2/2","1"], "correct_index": 0, "difficulty": "medio", "explanation": "Valor notável"},
+            {"prompt": "Solução de 2ˣ = 32:", "options": ["3","4","5","6"], "correct_index": 2, "difficulty": "dificil", "explanation": "2⁵=32"},
+            {"prompt": "Derivada de x³:", "options": ["x²","3x²","3x","x⁴/4"], "correct_index": 1, "difficulty": "dificil", "explanation": "Regra da potência"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) Lim x→2 (x²−4)/(x−2):", "options": ["0","2","4","∞"], "correct_index": 2, "difficulty": "dificil", "explanation": "Fatora: (x+2)(x−2)/(x−2) → x+2 = 4"},
+            {"prompt": "Combinação C(5,2):", "options": ["5","10","20","25"], "correct_index": 1, "difficulty": "dificil", "explanation": "5!/(2!3!)=10"},
+            {"prompt": "Probabilidade de tirar par num dado:", "options": ["1/3","1/2","2/3","1/6"], "correct_index": 1, "difficulty": "medio", "explanation": "3/6 = 1/2"},
+            {"prompt": "Integral de 2x dx:", "options": ["x²+C","2","x²/2","2x²"], "correct_index": 0, "difficulty": "dificil", "explanation": "∫2x = x² + C"},
+        ],
+    },
+    "Biologia": {
+        "basico": [
+            {"prompt": "Unidade básica da vida:", "options": ["Átomo","Célula","Tecido","Órgão"], "correct_index": 1, "difficulty": "facil", "explanation": "A célula é a menor unidade viva"},
+            {"prompt": "Onde ocorre a fotossíntese?", "options": ["Mitocôndria","Cloroplasto","Núcleo","Vacúolo"], "correct_index": 1, "difficulty": "facil", "explanation": "Nos cloroplastos"},
+            {"prompt": "Mamíferos respiram por:", "options": ["Brânquias","Pele","Pulmões","Traqueias"], "correct_index": 2, "difficulty": "facil", "explanation": "Pulmões"},
+            {"prompt": "Reino dos cogumelos:", "options": ["Plantae","Fungi","Animalia","Protista"], "correct_index": 1, "difficulty": "facil", "explanation": "Reino Fungi"},
+        ],
+        "intermediario": [
+            {"prompt": "Material genético está no(a):", "options": ["Citoplasma","Núcleo","Membrana","Ribossomo"], "correct_index": 1, "difficulty": "medio", "explanation": "DNA no núcleo"},
+            {"prompt": "ATP é produzido principalmente em:", "options": ["Lisossomo","Mitocôndria","Golgi","Vacúolo"], "correct_index": 1, "difficulty": "medio", "explanation": "Mitocôndria"},
+            {"prompt": "Tipo sanguíneo doador universal:", "options": ["A","B","AB","O-"], "correct_index": 3, "difficulty": "medio", "explanation": "O- doa para todos"},
+            {"prompt": "Cromossomos humanos somáticos:", "options": ["23","44","46","48"], "correct_index": 2, "difficulty": "medio", "explanation": "23 pares = 46"},
+        ],
+        "avancado": [
+            {"prompt": "Síntese de proteínas ocorre nos:", "options": ["Cloroplastos","Ribossomos","Lisossomos","Vacúolos"], "correct_index": 1, "difficulty": "medio", "explanation": "Ribossomos traduzem mRNA"},
+            {"prompt": "Mitose origina:", "options": ["4 gametas","2 células iguais","Meiose","Esporos"], "correct_index": 1, "difficulty": "medio", "explanation": "2 células-filhas idênticas"},
+            {"prompt": "Lei de Mendel: proporção F2:", "options": ["1:1","3:1","9:3:3:1","2:1"], "correct_index": 1, "difficulty": "dificil", "explanation": "Mono-híbrido = 3:1"},
+            {"prompt": "Vírus se reproduzem:", "options": ["Sozinhos","Por mitose","Em hospedeiro","Por meiose"], "correct_index": 2, "difficulty": "medio", "explanation": "Parasitas obrigatórios"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) Bioma com maior biodiversidade do Brasil:", "options": ["Cerrado","Caatinga","Amazônia","Pampa"], "correct_index": 2, "difficulty": "medio", "explanation": "Floresta Amazônica"},
+            {"prompt": "Eutrofização causa:", "options": ["Mais peixes","Aumento de O₂","Morte de peixes","Mais luz"], "correct_index": 2, "difficulty": "dificil", "explanation": "Excesso de nutrientes consome O₂"},
+            {"prompt": "Anabolismo:", "options": ["Quebra moléculas","Síntese","Respiração","Fermentação"], "correct_index": 1, "difficulty": "dificil", "explanation": "Síntese com gasto de energia"},
+            {"prompt": "Hormônio do crescimento:", "options": ["Insulina","GH","Adrenalina","Tiroxina"], "correct_index": 1, "difficulty": "medio", "explanation": "GH (somatotrofina)"},
+        ],
+    },
+    "Geografia": {
+        "basico": [
+            {"prompt": "Capital do Brasil:", "options": ["SP","RJ","Brasília","Salvador"], "correct_index": 2, "difficulty": "facil", "explanation": "Brasília desde 1960"},
+            {"prompt": "Maior continente:", "options": ["África","Ásia","América","Europa"], "correct_index": 1, "difficulty": "facil", "explanation": "Ásia"},
+            {"prompt": "Linha do Equador divide a Terra em:", "options": ["Leste/Oeste","Norte/Sul","4 partes","Tropical/Polar"], "correct_index": 1, "difficulty": "facil", "explanation": "Hemisférios N e S"},
+            {"prompt": "Brasil possui quantos estados?", "options": ["24","25","26","27"], "correct_index": 2, "difficulty": "facil", "explanation": "26 + DF"},
+        ],
+        "intermediario": [
+            {"prompt": "Bioma do sertão:", "options": ["Cerrado","Caatinga","Pantanal","Mata Atlântica"], "correct_index": 1, "difficulty": "medio", "explanation": "Caatinga é nordestina"},
+            {"prompt": "Rio mais extenso do Brasil:", "options": ["São Francisco","Amazonas","Paraná","Tocantins"], "correct_index": 1, "difficulty": "facil", "explanation": "Amazonas"},
+            {"prompt": "Movimento de translação dura:", "options": ["24h","30 dias","365 dias","100 anos"], "correct_index": 2, "difficulty": "facil", "explanation": "365,25 dias"},
+            {"prompt": "Migração rural→urbana chama-se:", "options": ["Êxodo rural","Êxodo urbano","Imigração","Refluxo"], "correct_index": 0, "difficulty": "medio", "explanation": "Êxodo rural"},
+        ],
+        "avancado": [
+            {"prompt": "Globalização refere-se a:", "options": ["Aquecimento","Integração mundial","Migração polar","Solo"], "correct_index": 1, "difficulty": "medio", "explanation": "Integração econômica/cultural global"},
+            {"prompt": "ONU foi criada em:", "options": ["1918","1945","1960","1989"], "correct_index": 1, "difficulty": "medio", "explanation": "Após 2ª Guerra"},
+            {"prompt": "BRICS inclui:", "options": ["Brasil, Rússia, Índia, China, África do Sul","só Europa","só Américas","UE"], "correct_index": 0, "difficulty": "medio", "explanation": "5 economias emergentes"},
+            {"prompt": "Mercosul é bloco:", "options": ["Asiático","Sul-americano","Africano","Europeu"], "correct_index": 1, "difficulty": "medio", "explanation": "Brasil, Arg, Uru, Par"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) Efeito estufa intensificado é causado por:", "options": ["Vapor d'água","CO₂ e CH₄","Oxigênio","Hélio"], "correct_index": 1, "difficulty": "dificil", "explanation": "Gases de efeito estufa"},
+            {"prompt": "IDH considera:", "options": ["Só PIB","Renda, educação, saúde","Religião","Política"], "correct_index": 1, "difficulty": "medio", "explanation": "Índice tridimensional"},
+            {"prompt": "Maior produtor mundial de soja:", "options": ["EUA","Brasil","Argentina","China"], "correct_index": 1, "difficulty": "dificil", "explanation": "Brasil lidera desde 2020"},
+            {"prompt": "Conflito histórico Israel-Palestina disputa:", "options": ["Petróleo","Território","Religião apenas","Águas"], "correct_index": 1, "difficulty": "dificil", "explanation": "Disputa territorial e religiosa"},
+        ],
+    },
+    "História": {
+        "basico": [
+            {"prompt": "Brasil foi descoberto em:", "options": ["1492","1500","1530","1822"], "correct_index": 1, "difficulty": "facil", "explanation": "22/4/1500 por Cabral"},
+            {"prompt": "Independência do Brasil:", "options": ["1500","1822","1889","1808"], "correct_index": 1, "difficulty": "facil", "explanation": "7/9/1822"},
+            {"prompt": "Egito antigo construiu:", "options": ["Coliseu","Pirâmides","Muralha","Acrópole"], "correct_index": 1, "difficulty": "facil", "explanation": "Pirâmides de Gizé"},
+            {"prompt": "Idade Média começa após queda de:", "options": ["Egito","Roma","Grécia","Persa"], "correct_index": 1, "difficulty": "facil", "explanation": "Império Romano (476)"},
+        ],
+        "intermediario": [
+            {"prompt": "Capitanias hereditárias por:", "options": ["D. João VI","D. Pedro I","D. João III","Cabral"], "correct_index": 2, "difficulty": "medio", "explanation": "D. João III, 1534"},
+            {"prompt": "Inconfidência Mineira:", "options": ["1789","1808","1822","1888"], "correct_index": 0, "difficulty": "medio", "explanation": "1789, contra a Coroa"},
+            {"prompt": "Abolição da escravidão:", "options": ["1822","1850","1888","1900"], "correct_index": 2, "difficulty": "facil", "explanation": "Lei Áurea, 1888"},
+            {"prompt": "Proclamação da República:", "options": ["1822","1889","1891","1930"], "correct_index": 1, "difficulty": "medio", "explanation": "15/11/1889"},
+        ],
+        "avancado": [
+            {"prompt": "Era Vargas inicia em:", "options": ["1922","1930","1945","1964"], "correct_index": 1, "difficulty": "medio", "explanation": "Revolução de 1930"},
+            {"prompt": "Ditadura militar brasileira:", "options": ["1930-1945","1945-1964","1964-1985","1985-2000"], "correct_index": 2, "difficulty": "medio", "explanation": "21 anos"},
+            {"prompt": "Plano Real:", "options": ["1985","1988","1994","2002"], "correct_index": 2, "difficulty": "medio", "explanation": "FHC ministro, 1994"},
+            {"prompt": "1ª Guerra Mundial:", "options": ["1900-1910","1914-1918","1939-1945","1950-1953"], "correct_index": 1, "difficulty": "medio", "explanation": "1914-1918"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(FUVEST) Revolução Industrial começou na:", "options": ["França","Alemanha","Inglaterra","EUA"], "correct_index": 2, "difficulty": "medio", "explanation": "Inglaterra séc XVIII"},
+            {"prompt": "Guerra Fria opôs:", "options": ["EUA × URSS","Brasil × Argentina","França × Inglaterra","Roma × Cartago"], "correct_index": 0, "difficulty": "medio", "explanation": "1947-1991"},
+            {"prompt": "Iluminismo defendia:", "options": ["Absolutismo","Razão e direitos","Feudalismo","Teocracia"], "correct_index": 1, "difficulty": "dificil", "explanation": "Voltaire, Rousseau, Locke"},
+            {"prompt": "Constituição cidadã brasileira:", "options": ["1824","1891","1934","1988"], "correct_index": 3, "difficulty": "medio", "explanation": "Constituição de 1988"},
+        ],
+    },
+    "Português": {
+        "basico": [
+            {"prompt": "Plural de 'cidadão':", "options": ["cidadões","cidadãos","cidadães","cidadans"], "correct_index": 1, "difficulty": "facil", "explanation": "cidadãos"},
+            {"prompt": "'Casa' é:", "options": ["Verbo","Adjetivo","Substantivo","Advérbio"], "correct_index": 2, "difficulty": "facil", "explanation": "Substantivo"},
+            {"prompt": "Sujeito de 'O cão late':", "options": ["late","O cão","cão","-"], "correct_index": 1, "difficulty": "facil", "explanation": "Sujeito completo"},
+            {"prompt": "Antônimo de 'feliz':", "options": ["alegre","triste","contente","bom"], "correct_index": 1, "difficulty": "facil", "explanation": "Triste"},
+        ],
+        "intermediario": [
+            {"prompt": "Crase obrigatória em:", "options": ["Vou a escola","Vou à escola","Vou a casa","Refiro-me a você"], "correct_index": 1, "difficulty": "medio", "explanation": "à = a + a (artigo)"},
+            {"prompt": "Predicado verbo-nominal possui:", "options": ["Só verbo","Só nome","Verbo + predicativo","Adjetivo"], "correct_index": 2, "difficulty": "medio", "explanation": "Verbo de ação + predicativo"},
+            {"prompt": "Conjunção adversativa:", "options": ["e","mas","porque","logo"], "correct_index": 1, "difficulty": "medio", "explanation": "Mas, porém, contudo"},
+            {"prompt": "'Onde' como pronome relativo refere-se a:", "options": ["Tempo","Lugar","Causa","Pessoa"], "correct_index": 1, "difficulty": "medio", "explanation": "Indica lugar"},
+        ],
+        "avancado": [
+            {"prompt": "Figura: 'mar de gente':", "options": ["Metáfora","Hipérbole","Ironia","Metonímia"], "correct_index": 0, "difficulty": "medio", "explanation": "Metáfora"},
+            {"prompt": "Oração subordinada substantiva subjetiva:", "options": ["É necessário que estudes","Sei que choveu","Casa que comprei","Choveu, embora frio"], "correct_index": 0, "difficulty": "dificil", "explanation": "Função de sujeito"},
+            {"prompt": "'Houveram' está:", "options": ["Correto","Errado: 'houve'","Regional","Antigo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Haver impessoal: houve"},
+            {"prompt": "Pronome demonstrativo:", "options": ["meu","este","ele","quem"], "correct_index": 1, "difficulty": "facil", "explanation": "Este, esse, aquele"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) Variação linguística:", "options": ["Erro","Mudança natural da língua","Invenção","Estrangeirismo"], "correct_index": 1, "difficulty": "medio", "explanation": "Língua é viva e varia"},
+            {"prompt": "Função da linguagem em poesia lírica:", "options": ["Referencial","Emotiva","Conativa","Metalinguística"], "correct_index": 1, "difficulty": "dificil", "explanation": "Foco no emissor"},
+            {"prompt": "Concordância: 'Faz dois anos ___':", "options": ["fazem","faz","fizeram","fariam"], "correct_index": 1, "difficulty": "dificil", "explanation": "Verbo impessoal: faz"},
+            {"prompt": "Coesão referencial usa:", "options": ["Pronomes","Adjetivos","Verbos","Vogais"], "correct_index": 0, "difficulty": "medio", "explanation": "Retomada por pronome"},
+        ],
+    },
+    "Química": {
+        "basico": [
+            {"prompt": "Símbolo do hidrogênio:", "options": ["H","He","Hi","Hg"], "correct_index": 0, "difficulty": "facil", "explanation": "H"},
+            {"prompt": "Água tem fórmula:", "options": ["CO₂","H₂O","NaCl","O₂"], "correct_index": 1, "difficulty": "facil", "explanation": "H₂O"},
+            {"prompt": "Estado físico do gelo:", "options": ["Sólido","Líquido","Gasoso","Plasma"], "correct_index": 0, "difficulty": "facil", "explanation": "Sólido"},
+            {"prompt": "Átomo é composto por:", "options": ["Só prótons","Prótons, nêutrons, elétrons","Só elétrons","Moléculas"], "correct_index": 1, "difficulty": "facil", "explanation": "p+, n⁰, e-"},
+        ],
+        "intermediario": [
+            {"prompt": "pH neutro:", "options": ["0","7","14","-7"], "correct_index": 1, "difficulty": "facil", "explanation": "Neutro = 7"},
+            {"prompt": "Família 1A (alcalinos):", "options": ["He, Ne","Li, Na, K","F, Cl","C, Si"], "correct_index": 1, "difficulty": "medio", "explanation": "Metais alcalinos"},
+            {"prompt": "NaCl é ligação:", "options": ["Covalente","Iônica","Metálica","Hidrogênio"], "correct_index": 1, "difficulty": "medio", "explanation": "Sal: iônica"},
+            {"prompt": "Mol contém ___ partículas:", "options": ["10²³","6,02×10²³","6,02×10¹⁰","10¹⁰"], "correct_index": 1, "difficulty": "medio", "explanation": "Avogadro"},
+        ],
+        "avancado": [
+            {"prompt": "Função orgânica do etanol (CH₃CH₂OH):", "options": ["Ácido","Álcool","Éter","Cetona"], "correct_index": 1, "difficulty": "medio", "explanation": "Grupo OH = álcool"},
+            {"prompt": "Reação exotérmica:", "options": ["Absorve calor","Libera calor","Não troca","Só luz"], "correct_index": 1, "difficulty": "medio", "explanation": "ΔH < 0"},
+            {"prompt": "Isomeria de C₂H₆O:", "options": ["Etanol/Éter dimetílico","CO₂","Metano","Glicose"], "correct_index": 0, "difficulty": "dificil", "explanation": "Isômeros de função"},
+            {"prompt": "Reação ácido-base produz:", "options": ["Sal e água","Apenas gás","Metal","Plástico"], "correct_index": 0, "difficulty": "medio", "explanation": "Neutralização"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(FUVEST) Lei de Lavoisier:", "options": ["Conservação da massa","Energia","Eletricidade","Gravidade"], "correct_index": 0, "difficulty": "medio", "explanation": "Massa se conserva"},
+            {"prompt": "Eletronegatividade maior:", "options": ["Na","Cl","K","Mg"], "correct_index": 1, "difficulty": "dificil", "explanation": "Cl entre os listados"},
+            {"prompt": "Hibridização do C no metano:", "options": ["sp","sp²","sp³","p"], "correct_index": 2, "difficulty": "dificil", "explanation": "4 ligações simples"},
+            {"prompt": "Concentração mol/L:", "options": ["g/L","mol/L","mol·L","mol/g"], "correct_index": 1, "difficulty": "medio", "explanation": "Molaridade"},
+        ],
+    },
+    "Física": {
+        "basico": [
+            {"prompt": "Unidade de força:", "options": ["Joule","Newton","Watt","Pascal"], "correct_index": 1, "difficulty": "facil", "explanation": "N (kg·m/s²)"},
+            {"prompt": "Velocidade média:", "options": ["d×t","d/t","t/d","d+t"], "correct_index": 1, "difficulty": "facil", "explanation": "Δs/Δt"},
+            {"prompt": "g (Terra) ≈:", "options": ["5","9,8","20","100"], "correct_index": 1, "difficulty": "facil", "explanation": "9,8 m/s²"},
+            {"prompt": "Peso = ?", "options": ["m","mg","ma","mv"], "correct_index": 1, "difficulty": "facil", "explanation": "P = m·g"},
+        ],
+        "intermediario": [
+            {"prompt": "1ª Lei de Newton:", "options": ["F=ma","Inércia","Ação-reação","Gravidade"], "correct_index": 1, "difficulty": "medio", "explanation": "Inércia"},
+            {"prompt": "Energia cinética:", "options": ["mgh","½mv²","mv","ma"], "correct_index": 1, "difficulty": "medio", "explanation": "Ec = ½mv²"},
+            {"prompt": "Trabalho (J) =", "options": ["F·d","F/d","F+d","F²"], "correct_index": 0, "difficulty": "medio", "explanation": "W = F·d·cosθ"},
+            {"prompt": "Som propaga-se em:", "options": ["Vácuo","Sólido/líquido/gás","Só ar","Só água"], "correct_index": 1, "difficulty": "facil", "explanation": "Precisa meio material"},
+        ],
+        "avancado": [
+            {"prompt": "Lei de Ohm:", "options": ["V=R/I","V=RI","V=I/R","R=V·I"], "correct_index": 1, "difficulty": "medio", "explanation": "V = R·I"},
+            {"prompt": "Comprimento de onda x freq:", "options": ["v=λf","v=λ/f","v=f/λ","v=λ+f"], "correct_index": 0, "difficulty": "medio", "explanation": "v = λ·f"},
+            {"prompt": "Carga do elétron:", "options": ["+","-","Neutra","Variável"], "correct_index": 1, "difficulty": "facil", "explanation": "Negativa"},
+            {"prompt": "Resistores em série soma:", "options": ["1/R","R total = R1+R2","R²","R/2"], "correct_index": 1, "difficulty": "medio", "explanation": "Somam-se"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) Energia potencial gravitacional:", "options": ["½mv²","mgh","Fd","ma"], "correct_index": 1, "difficulty": "medio", "explanation": "Ep = mgh"},
+            {"prompt": "Efeito fotoelétrico foi explicado por:", "options": ["Newton","Einstein","Bohr","Maxwell"], "correct_index": 1, "difficulty": "dificil", "explanation": "Einstein, Nobel 1921"},
+            {"prompt": "Lente que converge raios:", "options": ["Plana","Côncava","Convexa","Espelho"], "correct_index": 2, "difficulty": "medio", "explanation": "Lente convergente (convexa)"},
+            {"prompt": "Velocidade da luz:", "options": ["3·10⁵ km/s","3·10⁸ m/s","Mesmo valor","Ambas A e B"], "correct_index": 3, "difficulty": "dificil", "explanation": "c ≈ 3·10⁸ m/s = 3·10⁵ km/s"},
+        ],
+    },
+    "Literatura": {
+        "basico": [
+            {"prompt": "Gênero épico narra:", "options": ["Sentimentos","Heróis e feitos","Diálogos","Argumentos"], "correct_index": 1, "difficulty": "facil", "explanation": "Heróis"},
+            {"prompt": "Quem escreveu 'Dom Casmurro'?", "options": ["Drummond","Machado","Alencar","Bilac"], "correct_index": 1, "difficulty": "facil", "explanation": "Machado de Assis"},
+            {"prompt": "Soneto tem quantos versos:", "options": ["8","10","12","14"], "correct_index": 3, "difficulty": "facil", "explanation": "14 versos"},
+            {"prompt": "Verso branco:", "options": ["Sem rima","Sem métrica","Em branco","Curto"], "correct_index": 0, "difficulty": "facil", "explanation": "Sem rima"},
+        ],
+        "intermediario": [
+            {"prompt": "Iracema é de:", "options": ["Alencar","Castro Alves","Bilac","Drummond"], "correct_index": 0, "difficulty": "medio", "explanation": "Romantismo indianista"},
+            {"prompt": "Olavo Bilac é:", "options": ["Romântico","Parnasiano","Modernista","Barroco"], "correct_index": 1, "difficulty": "medio", "explanation": "Príncipe dos poetas"},
+            {"prompt": "Modernismo no Brasil começou em:", "options": ["1900","1922","1945","1964"], "correct_index": 1, "difficulty": "medio", "explanation": "Semana de 22"},
+            {"prompt": "Drummond é da:", "options": ["1ª geração","2ª geração","3ª geração","Romantismo"], "correct_index": 1, "difficulty": "medio", "explanation": "Geração de 30"},
+        ],
+        "avancado": [
+            {"prompt": "Realismo no Brasil:", "options": ["Sentimental","Crítico, social","Indianista","Religioso"], "correct_index": 1, "difficulty": "medio", "explanation": "Análise social"},
+            {"prompt": "Clarice Lispector é:", "options": ["Romântica","Modernista 3ª","Parnasiana","Árcade"], "correct_index": 1, "difficulty": "medio", "explanation": "3ª geração modernista"},
+            {"prompt": "'Vidas Secas' é de:", "options": ["Jorge Amado","Graciliano","Drummond","Machado"], "correct_index": 1, "difficulty": "medio", "explanation": "Graciliano Ramos, 1938"},
+            {"prompt": "Barroco caracteriza-se por:", "options": ["Equilíbrio","Conflitos e antíteses","Razão pura","Indianismo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Dualismo"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(FUVEST) 'Os Sertões' é de:", "options": ["Machado","Euclides da Cunha","Drummond","Lispector"], "correct_index": 1, "difficulty": "dificil", "explanation": "Euclides, 1902"},
+            {"prompt": "Concretismo enfatiza:", "options": ["Métrica","Forma visual","Personagens","Gramática"], "correct_index": 1, "difficulty": "dificil", "explanation": "Poesia visual"},
+            {"prompt": "Guimarães Rosa escreveu:", "options": ["Capitães de Areia","Grande Sertão: Veredas","Memórias","Iracema"], "correct_index": 1, "difficulty": "medio", "explanation": "1956"},
+            {"prompt": "Arcadismo busca:", "options": ["Cidade","Bucolismo","Guerra","Monarquia"], "correct_index": 1, "difficulty": "dificil", "explanation": "Vida no campo"},
+        ],
+    },
+    "Inglês": {
+        "basico": [
+            {"prompt": "I ___ a student.", "options": ["am","is","are","be"], "correct_index": 0, "difficulty": "facil", "explanation": "I + am"},
+            {"prompt": "She ___ tall.", "options": ["am","is","are","be"], "correct_index": 1, "difficulty": "facil", "explanation": "She + is"},
+            {"prompt": "Past of 'go':", "options": ["goed","went","gone","going"], "correct_index": 1, "difficulty": "facil", "explanation": "Irregular: went"},
+            {"prompt": "'Apple' significa:", "options": ["Banana","Maçã","Uva","Pera"], "correct_index": 1, "difficulty": "facil", "explanation": "Maçã"},
+        ],
+        "intermediario": [
+            {"prompt": "Present continuous of 'eat':", "options": ["eat","eating","ate","eaten"], "correct_index": 1, "difficulty": "medio", "explanation": "is/are eating"},
+            {"prompt": "Plural of 'child':", "options": ["childs","children","childes","child"], "correct_index": 1, "difficulty": "medio", "explanation": "Children (irregular)"},
+            {"prompt": "If I ___ rich, I would travel.", "options": ["am","were","be","is"], "correct_index": 1, "difficulty": "medio", "explanation": "2nd conditional"},
+            {"prompt": "'Beautiful' é:", "options": ["Verbo","Adjetivo","Advérbio","Substantivo"], "correct_index": 1, "difficulty": "facil", "explanation": "Adjective"},
+        ],
+        "avancado": [
+            {"prompt": "Comparative of 'good':", "options": ["gooder","more good","better","best"], "correct_index": 2, "difficulty": "medio", "explanation": "Better"},
+            {"prompt": "Passive voice of 'They build houses':", "options": ["Houses are built","Houses build","Houses being","Houses been"], "correct_index": 0, "difficulty": "medio", "explanation": "are + past participle"},
+            {"prompt": "Phrasal: 'give up' significa:", "options": ["Aumentar","Desistir","Dar","Subir"], "correct_index": 1, "difficulty": "medio", "explanation": "Desistir"},
+            {"prompt": "'Used to' indica:", "options": ["Hábito presente","Hábito passado","Futuro","Imperativo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Hábitos passados"},
+        ],
+        "pre_vestibular": [
+            {"prompt": "(ENEM) 'However' funciona como:", "options": ["Adição","Contraste","Causa","Conclusão"], "correct_index": 1, "difficulty": "medio", "explanation": "Conector de contraste"},
+            {"prompt": "Reading: main idea de um texto chama-se:", "options": ["Detail","Gist","Quote","List"], "correct_index": 1, "difficulty": "dificil", "explanation": "Gist = ideia central"},
+            {"prompt": "'Despite' é seguido por:", "options": ["Verbo","Substantivo/-ing","Adjetivo só","Advérbio"], "correct_index": 1, "difficulty": "dificil", "explanation": "Despite + noun/-ing"},
+            {"prompt": "Modal 'must' indica:", "options": ["Possibilidade","Obrigação forte","Habilidade","Permissão"], "correct_index": 1, "difficulty": "medio", "explanation": "Strong obligation"},
+        ],
+    },
 }
 
 ACHIEVEMENTS_SEED = [
@@ -466,47 +610,58 @@ ACHIEVEMENTS_SEED = [
     {"name": "Maratonista", "description": "Complete 15 lições", "icon": "Trophy", "color": "#EAB308", "type": "lessons", "threshold": 15, "order": 3},
     {"name": "Iniciando a chama", "description": "3 dias de ofensiva", "icon": "Flame", "color": "#F97316", "type": "streak", "threshold": 3, "order": 4},
     {"name": "Pegando fogo", "description": "7 dias de ofensiva", "icon": "Flame", "color": "#EF4444", "type": "streak", "threshold": 7, "order": 5},
-    {"name": "100 XP", "description": "Acumule 100 de XP", "icon": "Zap", "color": "#EAB308", "type": "xp", "threshold": 100, "order": 6},
-    {"name": "500 XP", "description": "Acumule 500 de XP", "icon": "Star", "color": "#8B5CF6", "type": "xp", "threshold": 500, "order": 7},
+    {"name": "100 XP", "description": "Acumule 100 XP", "icon": "Zap", "color": "#EAB308", "type": "xp", "threshold": 100, "order": 6},
+    {"name": "500 XP", "description": "Acumule 500 XP", "icon": "Star", "color": "#8B5CF6", "type": "xp", "threshold": 500, "order": 7},
     {"name": "Perfeição", "description": "Complete uma lição sem erros", "icon": "Award", "color": "#22C55E", "type": "perfect", "threshold": 1, "order": 8},
+    {"name": "Patente Prata", "description": "Alcance Prata", "icon": "Award", "color": "#94A3B8", "type": "rank", "threshold": 1, "order": 9},
+    {"name": "Patente Ouro", "description": "Alcance Ouro", "icon": "Trophy", "color": "#EAB308", "type": "rank", "threshold": 2, "order": 10},
+    {"name": "Patente Diamante", "description": "Alcance Diamante", "icon": "Diamond", "color": "#60A5FA", "type": "rank", "threshold": 4, "order": 11},
 ]
 
 
 @app.on_event("startup")
 async def seed_database():
-    if await db.subjects.count_documents({}) == 0:
+    # Always reseed if subjects mismatch the new structure
+    existing_subjects = await db.subjects.count_documents({})
+    expected = len(SUBJECTS_SEED)
+    needs_reseed = existing_subjects != expected
+    if not needs_reseed:
+        # check first subject color match
+        first = await db.subjects.find_one({"name": "Biologia"}, {"_id": 0})
+        if not first or first.get("color") != "#86EFAC":
+            needs_reseed = True
+    if needs_reseed:
+        await db.subjects.delete_many({})
+        await db.lessons.delete_many({})
+        await db.questions.delete_many({})
         for i, sub in enumerate(SUBJECTS_SEED):
             sub_id = str(uuid.uuid4())
             await db.subjects.insert_one({"id": sub_id, "order": i, **sub})
-            for j, lesson in enumerate(LESSONS_SEED.get(sub["name"], [])):
+            levels_for_sub = QUESTION_BANK.get(sub["name"], {})
+            for j, level in enumerate(["basico", "intermediario", "avancado", "pre_vestibular"]):
+                qs = levels_for_sub.get(level, [])
+                if not qs: continue
                 lesson_id = str(uuid.uuid4())
                 await db.lessons.insert_one({
                     "id": lesson_id, "subject_id": sub_id, "subject_name": sub["name"],
-                    "title": lesson["title"], "order": j,
+                    "title": f"{sub['name']} — {LEVEL_LABELS[level]}",
+                    "level": level, "order": j,
                 })
-                for k, q in enumerate(lesson["questions"]):
+                for k, q in enumerate(qs):
                     await db.questions.insert_one({
-                        "id": str(uuid.uuid4()), "lesson_id": lesson_id,
-                        "order": k, **q,
+                        "id": str(uuid.uuid4()), "lesson_id": lesson_id, "order": k, **q,
                     })
-    if await db.achievements.count_documents({}) == 0:
+    if await db.achievements.count_documents({}) != len(ACHIEVEMENTS_SEED):
+        await db.achievements.delete_many({})
         for ach in ACHIEVEMENTS_SEED:
             await db.achievements.insert_one({"id": str(uuid.uuid4()), **ach})
 
 
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
+app.add_middleware(CORSMiddleware,
     allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
+    allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

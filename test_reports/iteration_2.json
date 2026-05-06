@@ -1,0 +1,32 @@
+{
+  "summary": "Comprehensive backend + frontend testing of REVISA gamification iteration (ranks/coins/powers/9 subjects/levels). Backend: 18/18 pytest tests passing covering /meta/ranks, auth (new fields coins+rank), 9 subjects with correct hex colors (Bio #86EFAC, Quim #84CC16, Fis #1E40AF), 4 lessons per subject grouped by level, level locking (Bronze user gets 403 on intermediario), XP-by-difficulty + perfect bonus + coins (1/correct + 3 perfect), rank_up Bronze→Prata at 200 XP, /powers/use deduction & 400 errors, /powers/audience returns 4 percentages summing to 100 with bias to correct. Frontend: registered fresh user → tutorial modal auto-opens with 7 steps, navigation works, closes/persists; TopBar shows rank badge (Bronze), coins (10), xp, lives, streak, help icon; rank-progress-card shows current rank + XP to next; Trail page groups lessons in 4 level sections with PATENTE PRATA badge on locked levels; Lesson powers bar shows 3 buttons disabled when coins<15, enabled when >=15; audience power shows percentages under options and deducts 15 coins; result screen shows +45 XP, +7 MOEDAS, 1 OFENSIVA, achievements (Primeiro passo + Perfeição); no rank-up banner when XP<200 as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/lessons/{id}", "issue": "Response includes correct_index — exposes answers client-side (acceptable for MVP)"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is monolithic (~670 lines incl. seed). Consider splitting QUESTION_BANK into a separate seed_data.py module for maintainability.",
+    "GET /api/lessons/{id} returns correct_index — minor cheat vector; for MVP it's fine but should be addressed before public launch.",
+    "use_power endpoint deducts coins but server doesn't enforce 1-power-per-lesson (frontend-only state). If a user reloads mid-lesson they could use multiple. Acknowledged by problem statement.",
+    "audience pct rebalancing always adds diff to correct index — guarantees correct stays max even when random sums underflow; acceptable but pct[correct] could exceed 100 in edge case; bounded by current ranges so OK.",
+    "Tutorial auto-open uses localStorage flag 'revisa_tutorial_seen' — works correctly; tested.",
+    "All interactive elements have data-testid attributes (top-rank, top-coins, top-xp, top-lives, rank-progress-card, level-{level}, lesson-node-{level}-{i}, power-{id}, powers-bar, lesson-result-continue, rank-up-banner, rank-{id} on profile)."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% of tested flows"},
+  "test_credentials": "teste@revisa.com / teste123 (works). New users created via /register start with 10 coins, 0 XP, Bronze rank.",
+  "seed_data_creation": "Backend auto-reseeds on startup when subjects count != 9 OR Biologia color != #86EFAC. Verified: 9 subjects, 36 lessons (4 per subject × levels), questions per lesson, 11 achievements.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/backend_test.py covers all 18 critical endpoints incl. ranks/coins/powers/audience. Run with: export REACT_APP_BACKEND_URL=... && pytest -v. Frontend data-testids confirmed: top-{rank,coins,xp,lives,streak,help}, rank-progress-card, subject-{Name}, level-{basico|intermediario|avancado|pre_vestibular}, lesson-node-{level}-{i}, powers-bar, power-{fifty_fifty|skip|audience}, lesson-check-btn, lesson-next-btn, lesson-result-continue, rank-up-banner, tutorial-modal/next/prev/finish/close, home-help, rank-{id} on profile. New-user flow: register → tutorial 7 steps → home with rank card. Lesson 1 gives ~45 XP perfect (4q × medio mostly + 20 bonus) and 7 coins. Need to complete several lessons to cross 200 XP for Prata rank-up.",
+  "rca of the issue": "No bugs found. All new gamification features (9 subjects with brand colors, 6-rank progression, 4 levels with rank-gating, XP-by-difficulty + perfect bonus, coins economy, 3 powers, tutorial onboarding, profile ladder) work end-to-end. Backend correctly enforces level locking via 403, deducts coins for powers, returns biased audience stats. Frontend correctly disables powers when coins<15 and after one use, displays percentages on options for audience power, shows rank-up banner conditionally."
+}
