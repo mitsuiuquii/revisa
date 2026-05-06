@@ -107,11 +107,11 @@ def test_lessons_five_levels_bronze_only_basico(session, auth_headers):
     assert len(lessons) == 5
     by_level = {l["level"]: l for l in lessons}
     assert set(by_level.keys()) == {"basico", "intermediario", "avancado", "enem", "fuvest"}
-    assert by_level["basico"]["unlocked"] is True
-    assert by_level["intermediario"]["unlocked"] is False
-    assert by_level["avancado"]["unlocked"] is False
-    assert by_level["enem"]["unlocked"] is False
-    assert by_level["fuvest"]["unlocked"] is False
+    assert by_level["basico"]["unlocked"] == True
+    assert by_level["intermediario"]["unlocked"] == False
+    assert by_level["avancado"]["unlocked"] == False
+    assert by_level["enem"]["unlocked"] == False
+    assert by_level["fuvest"]["unlocked"] == False
     assert by_level["enem"]["required_rank"] == "platina"
     assert by_level["fuvest"]["required_rank"] == "diamante"
 
@@ -165,7 +165,7 @@ def test_complete_lesson_perfect_xp_coins_with_15_start(session):
                      json={"lesson_id": basico["id"], "answers": answers})
     assert r.status_code == 200
     res = r.json()
-    assert res["perfect"] is True
+    assert res["perfect"] == True
     assert res["correct"] == len(qs)
     assert res["xp_earned"] == expected_xp
     assert res["coins_earned"] == len(qs) + 3
@@ -189,7 +189,7 @@ def test_complete_lesson_wrong_no_perfect(session):
                      json={"lesson_id": basico["id"], "answers": answers})
     assert r.status_code == 200
     res = r.json()
-    assert res["perfect"] is False
+    assert res["perfect"] == False
     assert res["coins_earned"] == 0
     assert res["new_lives"] < 5
 
@@ -269,7 +269,7 @@ def test_achievements_includes_sabio_lendario(session, auth_headers):
     assert sabio is not None, "Achievement 'Sábio Lendário' missing"
     assert sabio["type"] == "rank"
     assert sabio["threshold"] == 5
-    assert sabio["unlocked"] is False
+    assert sabio["unlocked"] == False
 
 
 # ---------- AI PRACTICE: now requires 'topic' ----------
