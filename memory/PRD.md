@@ -1,50 +1,61 @@
 # REVISA — Product Requirements Document
 
 ## Original Problem
-Aplicativo educacional inspirado no Duolingo voltado para revisões de vestibular. Público: adolescentes 12-18 anos. Logo "REVISA" (navy + violet + rainbow bar). Cumprir a promessa de revisão com questões interativas e descontraídas.
+App educacional gamificado estilo Duolingo voltado a revisões de vestibular (ENEM/FUVEST). Público: 12-18 anos. Logo: navy + violet + barra arco-íris. Foco: questões interativas e descontraídas com revisões programadas.
 
 ## User Personas
-- **Estudante de Ensino Médio (12-18 anos)** preparando vestibular (ENEM/FUVEST). Quer revisar de forma rápida, gamificada, no celular, em sessões curtas (5-10 min).
+- Estudantes 12-18 anos preparando vestibular. Querem revisar de forma rápida e gamificada no celular, em sessões curtas, com sensação de progresso.
 
-## User Choices (via ask_human)
-- Matérias: todas as principais
-- Questões: banco fixo + IA (Emergent LLM, claude-sonnet-4-5)
-- Auth: e-mail/senha JWT (Google Auth deferido)
-- Mecânicas: completas (vidas, XP, streak, conquistas)
+## User Choices Confirmadas
+- 9 matérias (Mat, Bio, Geo, His, Port, Quim, Fis, Lit, Ing) — Redação removida
+- Banco de questões pré-cadastrado + IA (Emergent LLM, Claude Sonnet 4.5)
+- Login email/senha JWT (Google deferido)
+- Mecânicas Duolingo completas + patentes + moedas + powers Show do Milhão
+- Trilhas básico → pré-vestibular com bloqueio por patente
 
 ## Architecture
-- **Backend**: FastAPI + Motor + MongoDB. JWT auth (bcrypt). emergentintegrations for AI questions.
-- **Frontend**: React 19 + React Router 7 + Tailwind + Framer Motion + canvas-confetti. Mobile-first (max-w-md).
-- **Design**: Bricolage Grotesque (titulares) + Nunito (corpo); cards tácteis com border-2 e shadow offset; cores da marca (navy, violeta, laranja, amarelo, verde, vermelho).
+- **Backend**: FastAPI + Motor + MongoDB; JWT auth (bcrypt); emergentintegrations p/ AI
+- **Frontend**: React 19 + React Router 7 + Tailwind + Framer Motion + canvas-confetti; mobile-first (max-w-md)
+- **Design**: Bricolage Grotesque + Nunito; cards tácteis com sombra offset; cores da marca
 
-## Implemented Features (Feb 2026)
-- Auth (email/senha): /register, /login, JWT 30-dias, /api/auth/me
-- 10 matérias seedadas com lições e ~50 questões pré-cadastradas
-- Trilha de aprendizado estilo Duolingo (zig-zag, nós bloqueados/desbloqueados)
-- Lição interativa: 5 questões, feedback instantâneo (verde/vermelho), explicações, confetti
-- Sistema de XP + Ofensiva (streak diário, reset >1 dia) + Vidas (5 max, perdidas em erros, refill manual)
-- 8 conquistas (lições, XP, ofensiva, perfeição) com desbloqueio automático
-- Ranking (top 50 por XP)
-- Perfil com estatísticas + logout
-- Modo "Pratique com IA" (gera questões via Claude Sonnet 4.5 com EMERGENT_LLM_KEY)
-- Toaster (sonner), animações Framer Motion, confetti em acertos
-- Layout mobile-first com bottom nav fixo (Trilhas, IA, Conquistas, Ranking, Perfil)
+## Implemented (Feb 2026)
+### Iteração 1 (MVP)
+- Auth e-mail/senha + JWT 30 dias
+- 10 matérias inicial + lições + ~50 questões + 8 conquistas
+- Trilha Duolingo zig-zag, vidas/XP/streak
+- Loja de IA (Pratique com IA)
+- Ranking, conquistas, perfil, logout
 
-## Backlog (P1)
+### Iteração 2 (Gamificação Completa) ✅
+- **9 matérias com cores corretas**: Mat #3B82F6, Bio #86EFAC, Geo #A855F7, His #EF4444, Port #F97316, Quim #84CC16, Fis #1E40AF, Lit #EC4899, Ing #FACC15
+- **4 níveis de trilha por matéria**: Básico (6º-9º), Intermediário, Avançado, Pré-Vestibular — total 36 trilhas + 144+ questões marcadas com dificuldade
+- **6 patentes**: Bronze (0) → Prata (200) → Ouro (600) → Platina (1500) → Diamante (3500) → Sábio (7000) — desbloqueiam níveis (basico=Bronze, intermed=Prata, avancado=Ouro, pre_vest=Platina)
+- **XP variável**: 5/10/15 por dificuldade + bônus por % acerto (5/10/20)
+- **Sistema de moedas**: 1/acerto + 3 bônus se gabaritar; novos users começam com 10 moedas
+- **3 habilidades estilo Show do Milhão (15 moedas, 1 por lição)**:
+  - Universitários (50/50)
+  - Pular questão
+  - Plateia (estatística com viés à correta)
+- **Tutorial onboarding** (7 passos) automático no primeiro acesso, reabrir via "Como funciona?" / ícone help
+- **TopBar enriquecido**: rank badge, moedas, XP, vidas, streak, help
+- **Profile com ladder de patentes**
+- **Rank-up banner** ao subir de patente
+
+## Backlog
+### P1
 - Login social Google (Emergent Managed Auth)
-- Refill automático de vidas com timer (1 vida a cada 30min)
-- Mais lições por matéria (apenas Matemática tem 3, Português 2, demais 1)
-- Histórico de lições no perfil
-- Compartilhar conquistas / convidar amigos
-- Modo "tira-dúvidas" via IA
-- Notificações push de ofensiva
+- Mais questões por nível (atualmente ~4)
+- Refill automático de vidas com timer
+- Persistir power_used no backend para evitar reload-trick
+- Esconder correct_index do GET /api/lessons/{id} (validação só server-side)
+- Sons (acerto/erro/level-up)
 
-## Backlog (P2)
-- Editor de admin para criar matérias/lições
-- Duelos entre usuários
-- Loja de cosméticos com XP/gemas
-- Modo offline / PWA
-- Relatórios de desempenho por matéria
+### P2
+- Modo "tira-dúvidas" via IA (chat com explicação detalhada)
+- Duelos entre amigos (multiplayer simples)
+- Histórico/estatísticas por matéria
+- Notificações push de ofensiva
+- PWA / modo offline
 
 ## Test Credentials
 - email: teste@revisa.com / senha: teste123
