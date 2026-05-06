@@ -13,9 +13,9 @@
     --revisa-green: #22C55E;
     --revisa-red: #EF4444;
     --revisa-blue: #3B82F6;
-    --revisa-bg: #FAFAFA;
+    --revisa-pink: #EC4899;
 
-    --background: 0 0% 98%;
+    --background: 240 25% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -37,34 +37,33 @@
     --radius: 1rem;
 }
 
-* {
-    border-color: hsl(var(--border));
-}
+* { border-color: hsl(var(--border)); }
 
 html, body {
     margin: 0;
-    background: var(--revisa-bg);
     color: var(--revisa-navy);
     font-family: 'Nunito', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
 }
 
 body {
     font-weight: 600;
     overscroll-behavior-y: none;
+    background-color: #FFF7ED;
+    background-image:
+        radial-gradient(at 8% 6%, rgba(139, 92, 246, 0.16) 0, transparent 38%),
+        radial-gradient(at 92% 4%, rgba(249, 115, 22, 0.18) 0, transparent 36%),
+        radial-gradient(at 4% 88%, rgba(34, 197, 94, 0.15) 0, transparent 35%),
+        radial-gradient(at 96% 92%, rgba(236, 72, 153, 0.14) 0, transparent 38%),
+        radial-gradient(at 50% 50%, rgba(234, 179, 8, 0.06) 0, transparent 50%);
+    background-attachment: fixed;
 }
 
-.font-display {
-    font-family: 'Bricolage Grotesque', sans-serif;
-    letter-spacing: -0.02em;
-}
+.font-display { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -0.02em; }
+.font-body { font-family: 'Nunito', sans-serif; }
 
-.font-body {
-    font-family: 'Nunito', sans-serif;
-}
-
-/* Tactile button base */
 .btn-tactile {
     border-radius: 1rem;
     font-weight: 800;
@@ -79,17 +78,9 @@ body {
     box-shadow: 0 4px 0 0 var(--revisa-navy);
     padding: 0.875rem 1.25rem;
 }
-.btn-primary-revisa:hover {
-    background: var(--revisa-violet-dark);
-}
-.btn-primary-revisa:active {
-    transform: translateY(4px);
-    box-shadow: 0 0 0 0 var(--revisa-navy);
-}
-.btn-primary-revisa:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.btn-primary-revisa:hover { background: var(--revisa-violet-dark); }
+.btn-primary-revisa:active { transform: translateY(4px); box-shadow: 0 0 0 0 var(--revisa-navy); }
+.btn-primary-revisa:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-secondary-revisa {
     background: white;
@@ -98,10 +89,7 @@ body {
     box-shadow: 0 4px 0 0 var(--revisa-navy);
     padding: 0.875rem 1.25rem;
 }
-.btn-secondary-revisa:active {
-    transform: translateY(4px);
-    box-shadow: 0 0 0 0 var(--revisa-navy);
-}
+.btn-secondary-revisa:active { transform: translateY(4px); box-shadow: 0 0 0 0 var(--revisa-navy); }
 
 .tactile-card {
     background: white;
@@ -117,17 +105,10 @@ body {
     box-shadow: 0 2px 0 0 #E2E8F0;
 }
 
-/* Selection color */
-::selection {
-    background: var(--revisa-violet);
-    color: white;
-}
-
-/* Scrollbar */
+::selection { background: var(--revisa-violet); color: white; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 
-/* Trail dotted connector */
 .trail-connector {
     width: 4px;
     height: 28px;
@@ -136,16 +117,12 @@ body {
     margin: 0 auto;
 }
 
-/* Pulse for current node */
 @keyframes node-pulse {
     0%, 100% { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 0 rgba(139, 92, 246, 0.7); }
-    50% { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 12px rgba(139, 92, 246, 0); }
+    50%      { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 12px rgba(139, 92, 246, 0); }
 }
-.node-current {
-    animation: node-pulse 1.6s infinite;
-}
+.node-current { animation: node-pulse 1.6s infinite; }
 
-/* Shake */
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     20%, 60% { transform: translateX(-8px); }
@@ -153,5 +130,10 @@ body {
 }
 .shake { animation: shake 0.4s; }
 
-/* Hide emergent badge spacing */
+@keyframes float-slow {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50%      { transform: translateY(-8px) rotate(2deg); }
+}
+.float-slow { animation: float-slow 4s ease-in-out infinite; }
+
 #emergent-badge { display: none !important; }

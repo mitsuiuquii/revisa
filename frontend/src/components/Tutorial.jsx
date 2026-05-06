@@ -50,7 +50,7 @@ export default function Tutorial({ open, onClose, forceFirstTime }) {
       icon: Coins, color: "#EAB308",
     },
     {
-      title: "Habilidades (Show do Milhão!)",
+      title: "Habilidades especiais",
       body: "Custam 15 moedas e você só pode usar 1 por lição: Universitários (50/50), Pular Questão e Plateia (estatística).",
       icon: Users, color: "#22C55E",
     },

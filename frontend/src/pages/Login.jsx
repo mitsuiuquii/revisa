@@ -25,7 +25,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <div className="max-w-md mx-auto w-full px-6 pt-10">
         <Link to="/" className="font-display font-extrabold text-2xl text-slate-900 tracking-tight">
           Revisa<span className="text-violet-500">.</span>

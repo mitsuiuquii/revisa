@@ -35,8 +35,8 @@ RANKS = [
     {"id": "diamante", "name": "Diamante", "min_xp": 3500, "color": "#60A5FA", "icon": "Diamond"},
     {"id": "sabio",    "name": "Sábio",    "min_xp": 7000, "color": "#A855F7", "icon": "Crown"},
 ]
-LEVEL_RANK_REQUIRED = {"basico": "bronze", "intermediario": "prata", "avancado": "ouro", "pre_vestibular": "platina"}
-LEVEL_LABELS = {"basico": "Básico (6º-9º)", "intermediario": "Intermediário", "avancado": "Avançado", "pre_vestibular": "Pré-Vestibular"}
+LEVEL_RANK_REQUIRED = {"basico": "bronze", "intermediario": "prata", "avancado": "ouro", "enem": "platina", "fuvest": "diamante"}
+LEVEL_LABELS = {"basico": "Fundamental", "intermediario": "Médio Inicial", "avancado": "Médio Avançado", "enem": "ENEM", "fuvest": "FUVEST/USP"}
 DIFFICULTY_XP = {"facil": 5, "medio": 10, "dificil": 15}
 POWER_COST = 15
 POWERS = [
@@ -72,7 +72,7 @@ class QuestionAnswer(BaseModel):
 class CompleteLessonRequest(BaseModel):
     lesson_id: str; answers: List[QuestionAnswer]; power_used: Optional[str] = None
 class AIQuestionRequest(BaseModel):
-    subject: str; difficulty: str = "medio"
+    subject: str; topic: str; difficulty: str = "medio"
 class UsePowerRequest(BaseModel):
     power_id: str
 
@@ -114,7 +114,7 @@ async def register(data: UserRegister):
     doc = {
         "id": uid, "name": data.name, "email": data.email.lower(),
         "password_hash": hash_password(data.password),
-        "xp": 0, "lives": 5, "streak": 0, "coins": 10, "last_active": None,
+        "xp": 0, "lives": 5, "streak": 0, "coins": 15, "last_active": None,
         "completed_lessons": [], "achievements": [],
         "avatar_color": colors[hash(uid) % len(colors)],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -323,9 +323,11 @@ async def ai_question(req: AIQuestionRequest, user=Depends(get_current_user)):
         import json as json_lib
         chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"ai-{user['id']}-{uuid.uuid4()}",
             system_message=("Você é um professor brasileiro de vestibular (ENEM/FUVEST). "
-                "Crie questões de múltipla escolha em português. Retorne APENAS JSON, sem markdown.")
+                "Crie questões de múltipla escolha em português, no estilo de provas reais. Retorne APENAS JSON, sem markdown.")
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        prompt = (f"Questão de {req.subject}, dificuldade {req.difficulty}, estilo ENEM/FUVEST. "
+        topic = (req.topic or "").strip() or "geral"
+        prompt = (f"Gere 1 questão de {req.subject}, conteúdo específico: '{topic}', dificuldade {req.difficulty}, "
+            "no estilo ENEM/FUVEST/UFMG. "
             'Retorne JSON: {"prompt":"...","options":["a","b","c","d"],"correct_index":0,"explanation":"..."}')
         response = await chat.send_message(UserMessage(text=prompt))
         text = response.strip().strip("`")
@@ -333,7 +335,7 @@ async def ai_question(req: AIQuestionRequest, user=Depends(get_current_user)):
         data = json_lib.loads(text)
         return {"id": str(uuid.uuid4()), "prompt": data["prompt"], "options": data["options"],
                 "correct_index": int(data["correct_index"]), "explanation": data.get("explanation", ""),
-                "difficulty": req.difficulty}
+                "difficulty": req.difficulty, "source": f"IA · {req.subject} · {topic}"}
     except Exception as e:
         logger.exception("AI error")
         raise HTTPException(status_code=500, detail=f"Erro: {e}")
@@ -349,274 +351,7 @@ async def root(): return {"message": "REVISA API"}
 
 
 # ============= SEED =============
-SUBJECTS_SEED = [
-    {"name": "Matemática", "icon": "Calculator",   "color": "#3B82F6", "description": "Funções, geometria, álgebra"},
-    {"name": "Biologia",   "icon": "Leaf",         "color": "#86EFAC", "description": "Citologia, genética, ecologia"},
-    {"name": "Geografia",  "icon": "Globe",        "color": "#A855F7", "description": "Física e humana"},
-    {"name": "História",   "icon": "Landmark",     "color": "#EF4444", "description": "Brasil e mundo"},
-    {"name": "Português",  "icon": "BookOpen",     "color": "#F97316", "description": "Gramática e interpretação"},
-    {"name": "Química",    "icon": "FlaskConical", "color": "#84CC16", "description": "Orgânica e inorgânica"},
-    {"name": "Física",     "icon": "Atom",         "color": "#1E40AF", "description": "Mecânica, ondas, eletricidade"},
-    {"name": "Literatura", "icon": "BookMarked",   "color": "#EC4899", "description": "Movimentos literários"},
-    {"name": "Inglês",     "icon": "Languages",    "color": "#FACC15", "description": "Reading e gramática"},
-]
-
-# Compact seed: each subject gets 4 lessons (one per level), each lesson 4 questions
-def gen_questions(subject_name, level):
-    """Returns list of 4 questions per (subject, level)."""
-    bank = QUESTION_BANK.get(subject_name, {}).get(level, [])
-    return bank
-
-QUESTION_BANK = {
-    "Matemática": {
-        "basico": [
-            {"prompt": "Quanto é 7 × 8?", "options": ["54", "56", "58", "64"], "correct_index": 1, "difficulty": "facil", "explanation": "7×8=56"},
-            {"prompt": "Qual fração equivale a 0,5?", "options": ["1/4", "1/2", "1/3", "2/3"], "correct_index": 1, "difficulty": "facil", "explanation": "0,5 = 1/2"},
-            {"prompt": "Resolva: 25 − 7 + 3", "options": ["15", "21", "23", "29"], "correct_index": 1, "difficulty": "facil", "explanation": "18+3=21"},
-            {"prompt": "Quanto é 12² ?", "options": ["120", "144", "124", "168"], "correct_index": 1, "difficulty": "medio", "explanation": "12·12=144"},
-        ],
-        "intermediario": [
-            {"prompt": "f(x)=2x+3, f(5)=?", "options": ["10","13","11","15"], "correct_index": 1, "difficulty": "medio", "explanation": "2·5+3=13"},
-            {"prompt": "Raízes de x²−5x+6=0:", "options": ["1 e 6","2 e 3","-2 e -3","0 e 5"], "correct_index": 1, "difficulty": "medio", "explanation": "Soma=5, produto=6 → 2 e 3"},
-            {"prompt": "Área de quadrado lado 7:", "options": ["14","21","49","56"], "correct_index": 2, "difficulty": "facil", "explanation": "7²=49"},
-            {"prompt": "Razão entre 12 e 18:", "options": ["1/2","2/3","3/4","3/5"], "correct_index": 1, "difficulty": "medio", "explanation": "12/18 = 2/3"},
-        ],
-        "avancado": [
-            {"prompt": "log₁₀(1000) = ?", "options": ["1","2","3","10"], "correct_index": 2, "difficulty": "medio", "explanation": "10³=1000"},
-            {"prompt": "Sen(30°) =", "options": ["1/2","√3/2","√2/2","1"], "correct_index": 0, "difficulty": "medio", "explanation": "Valor notável"},
-            {"prompt": "Solução de 2ˣ = 32:", "options": ["3","4","5","6"], "correct_index": 2, "difficulty": "dificil", "explanation": "2⁵=32"},
-            {"prompt": "Derivada de x³:", "options": ["x²","3x²","3x","x⁴/4"], "correct_index": 1, "difficulty": "dificil", "explanation": "Regra da potência"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) Lim x→2 (x²−4)/(x−2):", "options": ["0","2","4","∞"], "correct_index": 2, "difficulty": "dificil", "explanation": "Fatora: (x+2)(x−2)/(x−2) → x+2 = 4"},
-            {"prompt": "Combinação C(5,2):", "options": ["5","10","20","25"], "correct_index": 1, "difficulty": "dificil", "explanation": "5!/(2!3!)=10"},
-            {"prompt": "Probabilidade de tirar par num dado:", "options": ["1/3","1/2","2/3","1/6"], "correct_index": 1, "difficulty": "medio", "explanation": "3/6 = 1/2"},
-            {"prompt": "Integral de 2x dx:", "options": ["x²+C","2","x²/2","2x²"], "correct_index": 0, "difficulty": "dificil", "explanation": "∫2x = x² + C"},
-        ],
-    },
-    "Biologia": {
-        "basico": [
-            {"prompt": "Unidade básica da vida:", "options": ["Átomo","Célula","Tecido","Órgão"], "correct_index": 1, "difficulty": "facil", "explanation": "A célula é a menor unidade viva"},
-            {"prompt": "Onde ocorre a fotossíntese?", "options": ["Mitocôndria","Cloroplasto","Núcleo","Vacúolo"], "correct_index": 1, "difficulty": "facil", "explanation": "Nos cloroplastos"},
-            {"prompt": "Mamíferos respiram por:", "options": ["Brânquias","Pele","Pulmões","Traqueias"], "correct_index": 2, "difficulty": "facil", "explanation": "Pulmões"},
-            {"prompt": "Reino dos cogumelos:", "options": ["Plantae","Fungi","Animalia","Protista"], "correct_index": 1, "difficulty": "facil", "explanation": "Reino Fungi"},
-        ],
-        "intermediario": [
-            {"prompt": "Material genético está no(a):", "options": ["Citoplasma","Núcleo","Membrana","Ribossomo"], "correct_index": 1, "difficulty": "medio", "explanation": "DNA no núcleo"},
-            {"prompt": "ATP é produzido principalmente em:", "options": ["Lisossomo","Mitocôndria","Golgi","Vacúolo"], "correct_index": 1, "difficulty": "medio", "explanation": "Mitocôndria"},
-            {"prompt": "Tipo sanguíneo doador universal:", "options": ["A","B","AB","O-"], "correct_index": 3, "difficulty": "medio", "explanation": "O- doa para todos"},
-            {"prompt": "Cromossomos humanos somáticos:", "options": ["23","44","46","48"], "correct_index": 2, "difficulty": "medio", "explanation": "23 pares = 46"},
-        ],
-        "avancado": [
-            {"prompt": "Síntese de proteínas ocorre nos:", "options": ["Cloroplastos","Ribossomos","Lisossomos","Vacúolos"], "correct_index": 1, "difficulty": "medio", "explanation": "Ribossomos traduzem mRNA"},
-            {"prompt": "Mitose origina:", "options": ["4 gametas","2 células iguais","Meiose","Esporos"], "correct_index": 1, "difficulty": "medio", "explanation": "2 células-filhas idênticas"},
-            {"prompt": "Lei de Mendel: proporção F2:", "options": ["1:1","3:1","9:3:3:1","2:1"], "correct_index": 1, "difficulty": "dificil", "explanation": "Mono-híbrido = 3:1"},
-            {"prompt": "Vírus se reproduzem:", "options": ["Sozinhos","Por mitose","Em hospedeiro","Por meiose"], "correct_index": 2, "difficulty": "medio", "explanation": "Parasitas obrigatórios"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) Bioma com maior biodiversidade do Brasil:", "options": ["Cerrado","Caatinga","Amazônia","Pampa"], "correct_index": 2, "difficulty": "medio", "explanation": "Floresta Amazônica"},
-            {"prompt": "Eutrofização causa:", "options": ["Mais peixes","Aumento de O₂","Morte de peixes","Mais luz"], "correct_index": 2, "difficulty": "dificil", "explanation": "Excesso de nutrientes consome O₂"},
-            {"prompt": "Anabolismo:", "options": ["Quebra moléculas","Síntese","Respiração","Fermentação"], "correct_index": 1, "difficulty": "dificil", "explanation": "Síntese com gasto de energia"},
-            {"prompt": "Hormônio do crescimento:", "options": ["Insulina","GH","Adrenalina","Tiroxina"], "correct_index": 1, "difficulty": "medio", "explanation": "GH (somatotrofina)"},
-        ],
-    },
-    "Geografia": {
-        "basico": [
-            {"prompt": "Capital do Brasil:", "options": ["SP","RJ","Brasília","Salvador"], "correct_index": 2, "difficulty": "facil", "explanation": "Brasília desde 1960"},
-            {"prompt": "Maior continente:", "options": ["África","Ásia","América","Europa"], "correct_index": 1, "difficulty": "facil", "explanation": "Ásia"},
-            {"prompt": "Linha do Equador divide a Terra em:", "options": ["Leste/Oeste","Norte/Sul","4 partes","Tropical/Polar"], "correct_index": 1, "difficulty": "facil", "explanation": "Hemisférios N e S"},
-            {"prompt": "Brasil possui quantos estados?", "options": ["24","25","26","27"], "correct_index": 2, "difficulty": "facil", "explanation": "26 + DF"},
-        ],
-        "intermediario": [
-            {"prompt": "Bioma do sertão:", "options": ["Cerrado","Caatinga","Pantanal","Mata Atlântica"], "correct_index": 1, "difficulty": "medio", "explanation": "Caatinga é nordestina"},
-            {"prompt": "Rio mais extenso do Brasil:", "options": ["São Francisco","Amazonas","Paraná","Tocantins"], "correct_index": 1, "difficulty": "facil", "explanation": "Amazonas"},
-            {"prompt": "Movimento de translação dura:", "options": ["24h","30 dias","365 dias","100 anos"], "correct_index": 2, "difficulty": "facil", "explanation": "365,25 dias"},
-            {"prompt": "Migração rural→urbana chama-se:", "options": ["Êxodo rural","Êxodo urbano","Imigração","Refluxo"], "correct_index": 0, "difficulty": "medio", "explanation": "Êxodo rural"},
-        ],
-        "avancado": [
-            {"prompt": "Globalização refere-se a:", "options": ["Aquecimento","Integração mundial","Migração polar","Solo"], "correct_index": 1, "difficulty": "medio", "explanation": "Integração econômica/cultural global"},
-            {"prompt": "ONU foi criada em:", "options": ["1918","1945","1960","1989"], "correct_index": 1, "difficulty": "medio", "explanation": "Após 2ª Guerra"},
-            {"prompt": "BRICS inclui:", "options": ["Brasil, Rússia, Índia, China, África do Sul","só Europa","só Américas","UE"], "correct_index": 0, "difficulty": "medio", "explanation": "5 economias emergentes"},
-            {"prompt": "Mercosul é bloco:", "options": ["Asiático","Sul-americano","Africano","Europeu"], "correct_index": 1, "difficulty": "medio", "explanation": "Brasil, Arg, Uru, Par"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) Efeito estufa intensificado é causado por:", "options": ["Vapor d'água","CO₂ e CH₄","Oxigênio","Hélio"], "correct_index": 1, "difficulty": "dificil", "explanation": "Gases de efeito estufa"},
-            {"prompt": "IDH considera:", "options": ["Só PIB","Renda, educação, saúde","Religião","Política"], "correct_index": 1, "difficulty": "medio", "explanation": "Índice tridimensional"},
-            {"prompt": "Maior produtor mundial de soja:", "options": ["EUA","Brasil","Argentina","China"], "correct_index": 1, "difficulty": "dificil", "explanation": "Brasil lidera desde 2020"},
-            {"prompt": "Conflito histórico Israel-Palestina disputa:", "options": ["Petróleo","Território","Religião apenas","Águas"], "correct_index": 1, "difficulty": "dificil", "explanation": "Disputa territorial e religiosa"},
-        ],
-    },
-    "História": {
-        "basico": [
-            {"prompt": "Brasil foi descoberto em:", "options": ["1492","1500","1530","1822"], "correct_index": 1, "difficulty": "facil", "explanation": "22/4/1500 por Cabral"},
-            {"prompt": "Independência do Brasil:", "options": ["1500","1822","1889","1808"], "correct_index": 1, "difficulty": "facil", "explanation": "7/9/1822"},
-            {"prompt": "Egito antigo construiu:", "options": ["Coliseu","Pirâmides","Muralha","Acrópole"], "correct_index": 1, "difficulty": "facil", "explanation": "Pirâmides de Gizé"},
-            {"prompt": "Idade Média começa após queda de:", "options": ["Egito","Roma","Grécia","Persa"], "correct_index": 1, "difficulty": "facil", "explanation": "Império Romano (476)"},
-        ],
-        "intermediario": [
-            {"prompt": "Capitanias hereditárias por:", "options": ["D. João VI","D. Pedro I","D. João III","Cabral"], "correct_index": 2, "difficulty": "medio", "explanation": "D. João III, 1534"},
-            {"prompt": "Inconfidência Mineira:", "options": ["1789","1808","1822","1888"], "correct_index": 0, "difficulty": "medio", "explanation": "1789, contra a Coroa"},
-            {"prompt": "Abolição da escravidão:", "options": ["1822","1850","1888","1900"], "correct_index": 2, "difficulty": "facil", "explanation": "Lei Áurea, 1888"},
-            {"prompt": "Proclamação da República:", "options": ["1822","1889","1891","1930"], "correct_index": 1, "difficulty": "medio", "explanation": "15/11/1889"},
-        ],
-        "avancado": [
-            {"prompt": "Era Vargas inicia em:", "options": ["1922","1930","1945","1964"], "correct_index": 1, "difficulty": "medio", "explanation": "Revolução de 1930"},
-            {"prompt": "Ditadura militar brasileira:", "options": ["1930-1945","1945-1964","1964-1985","1985-2000"], "correct_index": 2, "difficulty": "medio", "explanation": "21 anos"},
-            {"prompt": "Plano Real:", "options": ["1985","1988","1994","2002"], "correct_index": 2, "difficulty": "medio", "explanation": "FHC ministro, 1994"},
-            {"prompt": "1ª Guerra Mundial:", "options": ["1900-1910","1914-1918","1939-1945","1950-1953"], "correct_index": 1, "difficulty": "medio", "explanation": "1914-1918"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(FUVEST) Revolução Industrial começou na:", "options": ["França","Alemanha","Inglaterra","EUA"], "correct_index": 2, "difficulty": "medio", "explanation": "Inglaterra séc XVIII"},
-            {"prompt": "Guerra Fria opôs:", "options": ["EUA × URSS","Brasil × Argentina","França × Inglaterra","Roma × Cartago"], "correct_index": 0, "difficulty": "medio", "explanation": "1947-1991"},
-            {"prompt": "Iluminismo defendia:", "options": ["Absolutismo","Razão e direitos","Feudalismo","Teocracia"], "correct_index": 1, "difficulty": "dificil", "explanation": "Voltaire, Rousseau, Locke"},
-            {"prompt": "Constituição cidadã brasileira:", "options": ["1824","1891","1934","1988"], "correct_index": 3, "difficulty": "medio", "explanation": "Constituição de 1988"},
-        ],
-    },
-    "Português": {
-        "basico": [
-            {"prompt": "Plural de 'cidadão':", "options": ["cidadões","cidadãos","cidadães","cidadans"], "correct_index": 1, "difficulty": "facil", "explanation": "cidadãos"},
-            {"prompt": "'Casa' é:", "options": ["Verbo","Adjetivo","Substantivo","Advérbio"], "correct_index": 2, "difficulty": "facil", "explanation": "Substantivo"},
-            {"prompt": "Sujeito de 'O cão late':", "options": ["late","O cão","cão","-"], "correct_index": 1, "difficulty": "facil", "explanation": "Sujeito completo"},
-            {"prompt": "Antônimo de 'feliz':", "options": ["alegre","triste","contente","bom"], "correct_index": 1, "difficulty": "facil", "explanation": "Triste"},
-        ],
-        "intermediario": [
-            {"prompt": "Crase obrigatória em:", "options": ["Vou a escola","Vou à escola","Vou a casa","Refiro-me a você"], "correct_index": 1, "difficulty": "medio", "explanation": "à = a + a (artigo)"},
-            {"prompt": "Predicado verbo-nominal possui:", "options": ["Só verbo","Só nome","Verbo + predicativo","Adjetivo"], "correct_index": 2, "difficulty": "medio", "explanation": "Verbo de ação + predicativo"},
-            {"prompt": "Conjunção adversativa:", "options": ["e","mas","porque","logo"], "correct_index": 1, "difficulty": "medio", "explanation": "Mas, porém, contudo"},
-            {"prompt": "'Onde' como pronome relativo refere-se a:", "options": ["Tempo","Lugar","Causa","Pessoa"], "correct_index": 1, "difficulty": "medio", "explanation": "Indica lugar"},
-        ],
-        "avancado": [
-            {"prompt": "Figura: 'mar de gente':", "options": ["Metáfora","Hipérbole","Ironia","Metonímia"], "correct_index": 0, "difficulty": "medio", "explanation": "Metáfora"},
-            {"prompt": "Oração subordinada substantiva subjetiva:", "options": ["É necessário que estudes","Sei que choveu","Casa que comprei","Choveu, embora frio"], "correct_index": 0, "difficulty": "dificil", "explanation": "Função de sujeito"},
-            {"prompt": "'Houveram' está:", "options": ["Correto","Errado: 'houve'","Regional","Antigo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Haver impessoal: houve"},
-            {"prompt": "Pronome demonstrativo:", "options": ["meu","este","ele","quem"], "correct_index": 1, "difficulty": "facil", "explanation": "Este, esse, aquele"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) Variação linguística:", "options": ["Erro","Mudança natural da língua","Invenção","Estrangeirismo"], "correct_index": 1, "difficulty": "medio", "explanation": "Língua é viva e varia"},
-            {"prompt": "Função da linguagem em poesia lírica:", "options": ["Referencial","Emotiva","Conativa","Metalinguística"], "correct_index": 1, "difficulty": "dificil", "explanation": "Foco no emissor"},
-            {"prompt": "Concordância: 'Faz dois anos ___':", "options": ["fazem","faz","fizeram","fariam"], "correct_index": 1, "difficulty": "dificil", "explanation": "Verbo impessoal: faz"},
-            {"prompt": "Coesão referencial usa:", "options": ["Pronomes","Adjetivos","Verbos","Vogais"], "correct_index": 0, "difficulty": "medio", "explanation": "Retomada por pronome"},
-        ],
-    },
-    "Química": {
-        "basico": [
-            {"prompt": "Símbolo do hidrogênio:", "options": ["H","He","Hi","Hg"], "correct_index": 0, "difficulty": "facil", "explanation": "H"},
-            {"prompt": "Água tem fórmula:", "options": ["CO₂","H₂O","NaCl","O₂"], "correct_index": 1, "difficulty": "facil", "explanation": "H₂O"},
-            {"prompt": "Estado físico do gelo:", "options": ["Sólido","Líquido","Gasoso","Plasma"], "correct_index": 0, "difficulty": "facil", "explanation": "Sólido"},
-            {"prompt": "Átomo é composto por:", "options": ["Só prótons","Prótons, nêutrons, elétrons","Só elétrons","Moléculas"], "correct_index": 1, "difficulty": "facil", "explanation": "p+, n⁰, e-"},
-        ],
-        "intermediario": [
-            {"prompt": "pH neutro:", "options": ["0","7","14","-7"], "correct_index": 1, "difficulty": "facil", "explanation": "Neutro = 7"},
-            {"prompt": "Família 1A (alcalinos):", "options": ["He, Ne","Li, Na, K","F, Cl","C, Si"], "correct_index": 1, "difficulty": "medio", "explanation": "Metais alcalinos"},
-            {"prompt": "NaCl é ligação:", "options": ["Covalente","Iônica","Metálica","Hidrogênio"], "correct_index": 1, "difficulty": "medio", "explanation": "Sal: iônica"},
-            {"prompt": "Mol contém ___ partículas:", "options": ["10²³","6,02×10²³","6,02×10¹⁰","10¹⁰"], "correct_index": 1, "difficulty": "medio", "explanation": "Avogadro"},
-        ],
-        "avancado": [
-            {"prompt": "Função orgânica do etanol (CH₃CH₂OH):", "options": ["Ácido","Álcool","Éter","Cetona"], "correct_index": 1, "difficulty": "medio", "explanation": "Grupo OH = álcool"},
-            {"prompt": "Reação exotérmica:", "options": ["Absorve calor","Libera calor","Não troca","Só luz"], "correct_index": 1, "difficulty": "medio", "explanation": "ΔH < 0"},
-            {"prompt": "Isomeria de C₂H₆O:", "options": ["Etanol/Éter dimetílico","CO₂","Metano","Glicose"], "correct_index": 0, "difficulty": "dificil", "explanation": "Isômeros de função"},
-            {"prompt": "Reação ácido-base produz:", "options": ["Sal e água","Apenas gás","Metal","Plástico"], "correct_index": 0, "difficulty": "medio", "explanation": "Neutralização"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(FUVEST) Lei de Lavoisier:", "options": ["Conservação da massa","Energia","Eletricidade","Gravidade"], "correct_index": 0, "difficulty": "medio", "explanation": "Massa se conserva"},
-            {"prompt": "Eletronegatividade maior:", "options": ["Na","Cl","K","Mg"], "correct_index": 1, "difficulty": "dificil", "explanation": "Cl entre os listados"},
-            {"prompt": "Hibridização do C no metano:", "options": ["sp","sp²","sp³","p"], "correct_index": 2, "difficulty": "dificil", "explanation": "4 ligações simples"},
-            {"prompt": "Concentração mol/L:", "options": ["g/L","mol/L","mol·L","mol/g"], "correct_index": 1, "difficulty": "medio", "explanation": "Molaridade"},
-        ],
-    },
-    "Física": {
-        "basico": [
-            {"prompt": "Unidade de força:", "options": ["Joule","Newton","Watt","Pascal"], "correct_index": 1, "difficulty": "facil", "explanation": "N (kg·m/s²)"},
-            {"prompt": "Velocidade média:", "options": ["d×t","d/t","t/d","d+t"], "correct_index": 1, "difficulty": "facil", "explanation": "Δs/Δt"},
-            {"prompt": "g (Terra) ≈:", "options": ["5","9,8","20","100"], "correct_index": 1, "difficulty": "facil", "explanation": "9,8 m/s²"},
-            {"prompt": "Peso = ?", "options": ["m","mg","ma","mv"], "correct_index": 1, "difficulty": "facil", "explanation": "P = m·g"},
-        ],
-        "intermediario": [
-            {"prompt": "1ª Lei de Newton:", "options": ["F=ma","Inércia","Ação-reação","Gravidade"], "correct_index": 1, "difficulty": "medio", "explanation": "Inércia"},
-            {"prompt": "Energia cinética:", "options": ["mgh","½mv²","mv","ma"], "correct_index": 1, "difficulty": "medio", "explanation": "Ec = ½mv²"},
-            {"prompt": "Trabalho (J) =", "options": ["F·d","F/d","F+d","F²"], "correct_index": 0, "difficulty": "medio", "explanation": "W = F·d·cosθ"},
-            {"prompt": "Som propaga-se em:", "options": ["Vácuo","Sólido/líquido/gás","Só ar","Só água"], "correct_index": 1, "difficulty": "facil", "explanation": "Precisa meio material"},
-        ],
-        "avancado": [
-            {"prompt": "Lei de Ohm:", "options": ["V=R/I","V=RI","V=I/R","R=V·I"], "correct_index": 1, "difficulty": "medio", "explanation": "V = R·I"},
-            {"prompt": "Comprimento de onda x freq:", "options": ["v=λf","v=λ/f","v=f/λ","v=λ+f"], "correct_index": 0, "difficulty": "medio", "explanation": "v = λ·f"},
-            {"prompt": "Carga do elétron:", "options": ["+","-","Neutra","Variável"], "correct_index": 1, "difficulty": "facil", "explanation": "Negativa"},
-            {"prompt": "Resistores em série soma:", "options": ["1/R","R total = R1+R2","R²","R/2"], "correct_index": 1, "difficulty": "medio", "explanation": "Somam-se"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) Energia potencial gravitacional:", "options": ["½mv²","mgh","Fd","ma"], "correct_index": 1, "difficulty": "medio", "explanation": "Ep = mgh"},
-            {"prompt": "Efeito fotoelétrico foi explicado por:", "options": ["Newton","Einstein","Bohr","Maxwell"], "correct_index": 1, "difficulty": "dificil", "explanation": "Einstein, Nobel 1921"},
-            {"prompt": "Lente que converge raios:", "options": ["Plana","Côncava","Convexa","Espelho"], "correct_index": 2, "difficulty": "medio", "explanation": "Lente convergente (convexa)"},
-            {"prompt": "Velocidade da luz:", "options": ["3·10⁵ km/s","3·10⁸ m/s","Mesmo valor","Ambas A e B"], "correct_index": 3, "difficulty": "dificil", "explanation": "c ≈ 3·10⁸ m/s = 3·10⁵ km/s"},
-        ],
-    },
-    "Literatura": {
-        "basico": [
-            {"prompt": "Gênero épico narra:", "options": ["Sentimentos","Heróis e feitos","Diálogos","Argumentos"], "correct_index": 1, "difficulty": "facil", "explanation": "Heróis"},
-            {"prompt": "Quem escreveu 'Dom Casmurro'?", "options": ["Drummond","Machado","Alencar","Bilac"], "correct_index": 1, "difficulty": "facil", "explanation": "Machado de Assis"},
-            {"prompt": "Soneto tem quantos versos:", "options": ["8","10","12","14"], "correct_index": 3, "difficulty": "facil", "explanation": "14 versos"},
-            {"prompt": "Verso branco:", "options": ["Sem rima","Sem métrica","Em branco","Curto"], "correct_index": 0, "difficulty": "facil", "explanation": "Sem rima"},
-        ],
-        "intermediario": [
-            {"prompt": "Iracema é de:", "options": ["Alencar","Castro Alves","Bilac","Drummond"], "correct_index": 0, "difficulty": "medio", "explanation": "Romantismo indianista"},
-            {"prompt": "Olavo Bilac é:", "options": ["Romântico","Parnasiano","Modernista","Barroco"], "correct_index": 1, "difficulty": "medio", "explanation": "Príncipe dos poetas"},
-            {"prompt": "Modernismo no Brasil começou em:", "options": ["1900","1922","1945","1964"], "correct_index": 1, "difficulty": "medio", "explanation": "Semana de 22"},
-            {"prompt": "Drummond é da:", "options": ["1ª geração","2ª geração","3ª geração","Romantismo"], "correct_index": 1, "difficulty": "medio", "explanation": "Geração de 30"},
-        ],
-        "avancado": [
-            {"prompt": "Realismo no Brasil:", "options": ["Sentimental","Crítico, social","Indianista","Religioso"], "correct_index": 1, "difficulty": "medio", "explanation": "Análise social"},
-            {"prompt": "Clarice Lispector é:", "options": ["Romântica","Modernista 3ª","Parnasiana","Árcade"], "correct_index": 1, "difficulty": "medio", "explanation": "3ª geração modernista"},
-            {"prompt": "'Vidas Secas' é de:", "options": ["Jorge Amado","Graciliano","Drummond","Machado"], "correct_index": 1, "difficulty": "medio", "explanation": "Graciliano Ramos, 1938"},
-            {"prompt": "Barroco caracteriza-se por:", "options": ["Equilíbrio","Conflitos e antíteses","Razão pura","Indianismo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Dualismo"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(FUVEST) 'Os Sertões' é de:", "options": ["Machado","Euclides da Cunha","Drummond","Lispector"], "correct_index": 1, "difficulty": "dificil", "explanation": "Euclides, 1902"},
-            {"prompt": "Concretismo enfatiza:", "options": ["Métrica","Forma visual","Personagens","Gramática"], "correct_index": 1, "difficulty": "dificil", "explanation": "Poesia visual"},
-            {"prompt": "Guimarães Rosa escreveu:", "options": ["Capitães de Areia","Grande Sertão: Veredas","Memórias","Iracema"], "correct_index": 1, "difficulty": "medio", "explanation": "1956"},
-            {"prompt": "Arcadismo busca:", "options": ["Cidade","Bucolismo","Guerra","Monarquia"], "correct_index": 1, "difficulty": "dificil", "explanation": "Vida no campo"},
-        ],
-    },
-    "Inglês": {
-        "basico": [
-            {"prompt": "I ___ a student.", "options": ["am","is","are","be"], "correct_index": 0, "difficulty": "facil", "explanation": "I + am"},
-            {"prompt": "She ___ tall.", "options": ["am","is","are","be"], "correct_index": 1, "difficulty": "facil", "explanation": "She + is"},
-            {"prompt": "Past of 'go':", "options": ["goed","went","gone","going"], "correct_index": 1, "difficulty": "facil", "explanation": "Irregular: went"},
-            {"prompt": "'Apple' significa:", "options": ["Banana","Maçã","Uva","Pera"], "correct_index": 1, "difficulty": "facil", "explanation": "Maçã"},
-        ],
-        "intermediario": [
-            {"prompt": "Present continuous of 'eat':", "options": ["eat","eating","ate","eaten"], "correct_index": 1, "difficulty": "medio", "explanation": "is/are eating"},
-            {"prompt": "Plural of 'child':", "options": ["childs","children","childes","child"], "correct_index": 1, "difficulty": "medio", "explanation": "Children (irregular)"},
-            {"prompt": "If I ___ rich, I would travel.", "options": ["am","were","be","is"], "correct_index": 1, "difficulty": "medio", "explanation": "2nd conditional"},
-            {"prompt": "'Beautiful' é:", "options": ["Verbo","Adjetivo","Advérbio","Substantivo"], "correct_index": 1, "difficulty": "facil", "explanation": "Adjective"},
-        ],
-        "avancado": [
-            {"prompt": "Comparative of 'good':", "options": ["gooder","more good","better","best"], "correct_index": 2, "difficulty": "medio", "explanation": "Better"},
-            {"prompt": "Passive voice of 'They build houses':", "options": ["Houses are built","Houses build","Houses being","Houses been"], "correct_index": 0, "difficulty": "medio", "explanation": "are + past participle"},
-            {"prompt": "Phrasal: 'give up' significa:", "options": ["Aumentar","Desistir","Dar","Subir"], "correct_index": 1, "difficulty": "medio", "explanation": "Desistir"},
-            {"prompt": "'Used to' indica:", "options": ["Hábito presente","Hábito passado","Futuro","Imperativo"], "correct_index": 1, "difficulty": "dificil", "explanation": "Hábitos passados"},
-        ],
-        "pre_vestibular": [
-            {"prompt": "(ENEM) 'However' funciona como:", "options": ["Adição","Contraste","Causa","Conclusão"], "correct_index": 1, "difficulty": "medio", "explanation": "Conector de contraste"},
-            {"prompt": "Reading: main idea de um texto chama-se:", "options": ["Detail","Gist","Quote","List"], "correct_index": 1, "difficulty": "dificil", "explanation": "Gist = ideia central"},
-            {"prompt": "'Despite' é seguido por:", "options": ["Verbo","Substantivo/-ing","Adjetivo só","Advérbio"], "correct_index": 1, "difficulty": "dificil", "explanation": "Despite + noun/-ing"},
-            {"prompt": "Modal 'must' indica:", "options": ["Possibilidade","Obrigação forte","Habilidade","Permissão"], "correct_index": 1, "difficulty": "medio", "explanation": "Strong obligation"},
-        ],
-    },
-}
-
-ACHIEVEMENTS_SEED = [
-    {"name": "Primeiro passo", "description": "Complete sua primeira lição", "icon": "Sparkles", "color": "#22C55E", "type": "lessons", "threshold": 1, "order": 1},
-    {"name": "Aluno dedicado", "description": "Complete 5 lições", "icon": "BookOpen", "color": "#3B82F6", "type": "lessons", "threshold": 5, "order": 2},
-    {"name": "Maratonista", "description": "Complete 15 lições", "icon": "Trophy", "color": "#EAB308", "type": "lessons", "threshold": 15, "order": 3},
-    {"name": "Iniciando a chama", "description": "3 dias de ofensiva", "icon": "Flame", "color": "#F97316", "type": "streak", "threshold": 3, "order": 4},
-    {"name": "Pegando fogo", "description": "7 dias de ofensiva", "icon": "Flame", "color": "#EF4444", "type": "streak", "threshold": 7, "order": 5},
-    {"name": "100 XP", "description": "Acumule 100 XP", "icon": "Zap", "color": "#EAB308", "type": "xp", "threshold": 100, "order": 6},
-    {"name": "500 XP", "description": "Acumule 500 XP", "icon": "Star", "color": "#8B5CF6", "type": "xp", "threshold": 500, "order": 7},
-    {"name": "Perfeição", "description": "Complete uma lição sem erros", "icon": "Award", "color": "#22C55E", "type": "perfect", "threshold": 1, "order": 8},
-    {"name": "Patente Prata", "description": "Alcance Prata", "icon": "Award", "color": "#94A3B8", "type": "rank", "threshold": 1, "order": 9},
-    {"name": "Patente Ouro", "description": "Alcance Ouro", "icon": "Trophy", "color": "#EAB308", "type": "rank", "threshold": 2, "order": 10},
-    {"name": "Patente Diamante", "description": "Alcance Diamante", "icon": "Diamond", "color": "#60A5FA", "type": "rank", "threshold": 4, "order": 11},
-]
+from seed_data import SUBJECTS_SEED, QUESTION_BANK, ACHIEVEMENTS_SEED, LEVELS as SEED_LEVELS
 
 
 @app.on_event("startup")
@@ -626,9 +361,9 @@ async def seed_database():
     expected = len(SUBJECTS_SEED)
     needs_reseed = existing_subjects != expected
     if not needs_reseed:
-        # check first subject color match
-        first = await db.subjects.find_one({"name": "Biologia"}, {"_id": 0})
-        if not first or first.get("color") != "#86EFAC":
+        # Reseed if the new "fuvest" level isn't present (means old structure)
+        has_fuvest = await db.lessons.find_one({"level": "fuvest"})
+        if not has_fuvest:
             needs_reseed = True
     if needs_reseed:
         await db.subjects.delete_many({})
@@ -638,7 +373,7 @@ async def seed_database():
             sub_id = str(uuid.uuid4())
             await db.subjects.insert_one({"id": sub_id, "order": i, **sub})
             levels_for_sub = QUESTION_BANK.get(sub["name"], {})
-            for j, level in enumerate(["basico", "intermediario", "avancado", "pre_vestibular"]):
+            for j, level in enumerate(SEED_LEVELS):
                 qs = levels_for_sub.get(level, [])
                 if not qs: continue
                 lesson_id = str(uuid.uuid4())

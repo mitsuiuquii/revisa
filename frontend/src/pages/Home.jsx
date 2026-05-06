@@ -100,9 +100,10 @@ export default function Home() {
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: i * 0.04 }}
-              className="tactile-card w-full p-4 flex items-center gap-4 text-left hover:translate-y-0.5 hover:shadow-[3px_3px_0_0_#0F172A] transition-all"
+              className="tactile-card w-full p-4 flex items-center gap-4 text-left hover:translate-y-0.5 hover:shadow-[3px_3px_0_0_#0F172A] transition-all relative overflow-hidden"
+              style={{ backgroundImage: `linear-gradient(135deg, ${s.color}10 0%, transparent 60%)` }}
             >
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-slate-900 shrink-0" style={{ background: s.color, color: "white" }}>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center border-2 border-slate-900 shrink-0 relative" style={{ background: s.color, color: "white", boxShadow: `0 3px 0 0 ${s.color}99` }}>
                 <Icon className="w-7 h-7" strokeWidth={2.8} />
               </div>
               <div className="flex-1 min-w-0">

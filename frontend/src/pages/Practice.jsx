@@ -2,14 +2,26 @@ import { useState } from "react";
 import Layout from "../components/Layout";
 import { api } from "../lib/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Check, X } from "lucide-react";
+import { Sparkles, Loader2, Check, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
-const SUBJECTS = ["Matemática", "Português", "História", "Geografia", "Biologia", "Química", "Física", "Literatura", "Inglês", "Redação"];
+const SUBJECTS = ["Matemática", "Português", "História", "Geografia", "Biologia", "Química", "Física", "Literatura", "Inglês"];
 const DIFFICULTIES = [{ id: "facil", label: "Fácil" }, { id: "medio", label: "Médio" }, { id: "dificil", label: "Difícil" }];
+const TOPIC_HINTS = {
+  "Matemática": "ex: trigonometria, funções",
+  "Português": "ex: crase, regência",
+  "História": "ex: Era Vargas, Grécia antiga",
+  "Geografia": "ex: climas, urbanização",
+  "Biologia": "ex: genética, citologia",
+  "Química": "ex: estequiometria, orgânica",
+  "Física": "ex: cinemática, óptica",
+  "Literatura": "ex: modernismo, Machado",
+  "Inglês": "ex: passive voice, reading",
+};
 
 export default function Practice() {
   const [subject, setSubject] = useState(SUBJECTS[0]);
+  const [topic, setTopic] = useState("");
   const [difficulty, setDifficulty] = useState("medio");
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState(null);
@@ -17,9 +29,10 @@ export default function Practice() {
   const [answered, setAnswered] = useState(false);
 
   const generate = async () => {
+    if (!topic.trim()) { toast.error("Escreva o conteúdo da pergunta"); return; }
     setBusy(true); setQ(null); setSelected(null); setAnswered(false);
     try {
-      const { data } = await api.post("/practice/ai", { subject, difficulty });
+      const { data } = await api.post("/practice/ai", { subject, topic: topic.trim(), difficulty });
       setQ(data);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao gerar questão");
@@ -34,11 +47,11 @@ export default function Practice() {
         <Sparkles className="w-6 h-6 text-violet-500" strokeWidth={3} />
         <h1 className="font-display font-extrabold text-3xl text-slate-900 leading-none">Pratique com IA</h1>
       </div>
-      <p className="text-slate-600 font-bold mt-1">Questão nova geradinha pra você 🚀</p>
+      <p className="text-slate-600 font-bold mt-1">Diga o conteúdo e a IA gera uma questão pra você 🚀</p>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-4">
         <div>
-          <label className="text-xs font-extrabold uppercase tracking-widest text-slate-700">Matéria</label>
+          <label className="text-xs font-extrabold uppercase tracking-widest text-slate-700">1. Matéria</label>
           <div className="flex flex-wrap gap-2 mt-2">
             {SUBJECTS.map((s) => (
               <button
@@ -52,8 +65,22 @@ export default function Practice() {
             ))}
           </div>
         </div>
+
         <div>
-          <label className="text-xs font-extrabold uppercase tracking-widest text-slate-700">Dificuldade</label>
+          <label className="text-xs font-extrabold uppercase tracking-widest text-slate-700">2. Conteúdo</label>
+          <input
+            type="text"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder={TOPIC_HINTS[subject]}
+            className="w-full mt-2 px-4 py-3 bg-white border-2 border-slate-300 rounded-2xl font-bold focus:outline-none focus:border-violet-500"
+            data-testid="practice-topic"
+            maxLength={80}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-extrabold uppercase tracking-widest text-slate-700">3. Dificuldade</label>
           <div className="flex gap-2 mt-2">
             {DIFFICULTIES.map((d) => (
               <button
@@ -67,7 +94,8 @@ export default function Practice() {
             ))}
           </div>
         </div>
-        <button onClick={generate} disabled={busy} className="btn-tactile btn-primary-revisa w-full flex items-center justify-center gap-2" data-testid="practice-generate">
+
+        <button onClick={generate} disabled={busy || !topic.trim()} className="btn-tactile btn-primary-revisa w-full flex items-center justify-center gap-2" data-testid="practice-generate">
           {busy ? <><Loader2 className="w-5 h-5 animate-spin" /> Gerando…</> : <><Sparkles className="w-5 h-5" strokeWidth={3} /> Gerar questão</>}
         </button>
       </div>
@@ -80,7 +108,7 @@ export default function Practice() {
             exit={{ opacity: 0 }}
             className="mt-6 tactile-card p-5"
           >
-            <p className="text-xs uppercase tracking-widest font-extrabold text-violet-600 mb-2">{subject} · {difficulty}</p>
+            <p className="text-xs uppercase tracking-widest font-extrabold text-violet-600 mb-2">{q.source || `${subject} · ${topic}`} · {difficulty}</p>
             <h2 className="font-display font-extrabold text-xl text-slate-900 mb-4">{q.prompt}</h2>
             <div className="space-y-2">
               {q.options.map((opt, i) => {
@@ -91,8 +119,7 @@ export default function Practice() {
                   else style = "bg-white border-slate-200 opacity-60";
                 } else if (selected === i) style = "bg-violet-100 border-violet-500";
                 return (
-                  <button
-                    key={`${q.id}-${i}`}
+                  <button key={`${q.id}-${i}`}
                     disabled={answered}
                     onClick={() => setSelected(i)}
                     className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-bold transition-all ${style}`}
@@ -113,7 +140,9 @@ export default function Practice() {
                   {selected === q.correct_index ? <><Check className="w-5 h-5" strokeWidth={4} /> Acertou!</> : <><X className="w-5 h-5" strokeWidth={4} /> Errou</>}
                 </div>
                 {q.explanation && <p className="text-sm text-slate-700 font-bold">{q.explanation}</p>}
-                <button onClick={generate} className="btn-tactile btn-primary-revisa w-full mt-4" data-testid="practice-another">Outra questão</button>
+                <button onClick={generate} className="btn-tactile btn-primary-revisa w-full mt-4 flex items-center justify-center gap-2" data-testid="practice-another">
+                  Outra questão <ArrowRight className="w-4 h-4" strokeWidth={3} />
+                </button>
               </div>
             )}
           </motion.div>

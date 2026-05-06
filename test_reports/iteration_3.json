@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 3 — REVISA refresh: 5 levels (basico/intermediario/avancado/enem/fuvest), new users start with 15 coins, AI Practice now requires 'topic' field, achievement 'Sábio Lendário' (rank threshold=5), question 'source' badges from real bancas (ENEM/FUVEST/UFMG/etc), and design refresh with colorful radial gradient body bg + subject cards with subtle gradient + colored shadow. Backend: 20/20 pytest tests passed including AI practice with topic returning source containing subject + topic. Frontend: registered new user → tutorial visible, step 6 reads 'Habilidades especiais' (NOT 'Show do Milhão'); top-coins shows 15; body has 4-stop radial gradient (violet/orange/green/pink); 9 subject cards with linear-gradient bg + colored shadow; Practice page has 3 fields (matéria, conteúdo, dificuldade), 'Gerar questão' button disabled with empty topic and enabled after filling 'trigonometria'; Profile shows 6 ranks; Lesson page shows source badge 'UFPR 2010' in question header.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py /api/practice/ai uses generic try/except returning 500; consider distinguishing JSON parse vs LLM API failures.",
+    "GET /api/lessons/{id} still returns correct_index in payload — minor cheat vector, acceptable for MVP.",
+    "Tutorial relies on localStorage flag 'revisa_tutorial_seen' (works); confirmed step 6 text updated.",
+    "Subject cards use inline backgroundImage + boxShadow correctly; ensure consistent contrast on light bg.",
+    "Achievement 'Sábio Lendário' threshold=5 means user must reach last rank index (sabio at min_xp=7000) — correctly mapped via rank_index >= 5."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% of tested flows"},
+  "test_credentials": "teste@revisa.com / teste123 (existing). New users via /register start with 15 coins, 0 XP, Bronze.",
+  "seed_data_creation": "Backend auto-reseeds when subjects mismatch OR no lessons with level='fuvest' present. Verified: 9 subjects × 5 lessons = 45 lessons, ~290 questions with 'source' field, achievements include 'Sábio Lendário'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/backend_test.py covers 20 tests including: meta/ranks 5 levels (basico/intermediario/avancado/enem/fuvest, NO pre_vestibular), register coins=15, 9 subjects × 5 lessons, fuvest locked for Bronze (403), questions have 'source' from real bancas, complete-lesson XP/coins (with new 15-coin baseline), powers/audience, achievements include 'Sábio Lendário' rank threshold=5, AI practice 422 without topic and 200 with topic returning source 'IA · {subject} · {topic}'. Frontend testids confirmed: top-coins (=15), tutorial-modal/next/close (step 6 = 'Habilidades especiais'), subject-{Name}, lesson-node-{level}-{i}, rank-{id}×6 on profile. Practice page shows 3 sections (Matéria/Conteúdo/Dificuldade) with 'Gerar questão' disabled until topic typed.",
+  "rca_of_the_issue": "No bugs. All requested behaviors validated end-to-end."
+}

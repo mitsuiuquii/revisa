@@ -10,7 +10,7 @@ export default function Welcome() {
   if (user) return <Navigate to="/home" replace />;
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <div className="max-w-md mx-auto w-full px-6 pt-10 pb-8 flex-1 flex flex-col">
         <motion.img
           initial={{ scale: 0.8, opacity: 0 }}

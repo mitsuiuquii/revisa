@@ -50,7 +50,7 @@ export default function Lesson() {
   const isCorrect = answered && selected === q.correct_index;
   const progressPct = ((idx + (answered ? 1 : 0)) / questions.length) * 100;
 
-  const usePower = async (powerId) => {
+  const handleUsePower = async (powerId) => {
     if (powerUsed) { toast.error("Você já usou uma habilidade nesta lição"); return; }
     if ((user?.coins || 0) < POWER_COST) { toast.error("Moedas insuficientes"); return; }
     try {
@@ -119,7 +119,7 @@ export default function Lesson() {
 
   if (result) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
           <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 300 }}>
             <div className="text-6xl mb-2">{result.perfect ? "🏆" : result.correct >= result.total / 2 ? "🎉" : "💪"}</div>
@@ -184,7 +184,7 @@ export default function Lesson() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex flex-col">
+    <div className="min-h-screen flex flex-col">
       <header className="px-4 py-3 flex items-center gap-3 max-w-md mx-auto w-full">
         <button onClick={() => nav(-1)} data-testid="lesson-close" className="p-2 hover:bg-slate-100 rounded-full">
           <X className="w-5 h-5 text-slate-500" strokeWidth={3} />
@@ -204,13 +204,18 @@ export default function Lesson() {
             initial={{ x: 30, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -30, opacity: 0 }}
             className="mt-2"
           >
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <p className="text-[10px] uppercase tracking-widest font-extrabold text-slate-500">{lesson.title} · {idx + 1}/{questions.length}</p>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full"
                 style={{ background: q.difficulty === "facil" ? "#DCFCE7" : q.difficulty === "medio" ? "#FEF3C7" : "#FEE2E2",
                          color: q.difficulty === "facil" ? "#15803D" : q.difficulty === "medio" ? "#A16207" : "#B91C1C" }}>
                 {q.difficulty}
               </span>
+              {q.source && (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                  {q.source}
+                </span>
+              )}
             </div>
             <h2 className="font-display font-extrabold text-2xl text-slate-900 leading-tight mb-5" data-testid="question-prompt">{q.prompt}</h2>
 
@@ -256,7 +261,7 @@ export default function Lesson() {
                 const disabled = !!powerUsed || (user?.coins || 0) < POWER_COST;
                 return (
                   <button key={p.id}
-                    onClick={() => usePower(p.id)}
+                    onClick={() => handleUsePower(p.id)}
                     disabled={disabled || used}
                     data-testid={`power-${p.id}`}
                     className={`flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-2xl border-2 transition-all
