@@ -163,7 +163,7 @@ export default function Lesson() {
                 }
                 return (
                   <button
-                    key={i}
+                    key={`${q.id}-${i}`}
                     onClick={() => !answered && setSelected(i)}
                     disabled={answered}
                     data-testid={`option-${i}`}

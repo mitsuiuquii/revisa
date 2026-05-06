@@ -19,7 +19,7 @@ def session():
 def test_user(session):
     """Register a new test user for isolated tests."""
     email = f"test_{uuid.uuid4().hex[:8]}@revisa.com"
-    password = "Test@12345"
+    password = os.environ.get("REVISA_TEST_PASSWORD", f"Tst-{uuid.uuid4().hex[:12]}!")
     r = session.post(f"{API}/auth/register", json={"name": "Tester", "email": email, "password": password})
     assert r.status_code == 200, r.text
     data = r.json()
@@ -90,9 +90,9 @@ def test_subject_lessons(session, auth_headers):
     assert "subject" in data and "lessons" in data
     lessons = data["lessons"]
     assert len(lessons) >= 1
-    assert lessons[0]["unlocked"] is True
+    assert lessons[0]["unlocked"] == True
     if len(lessons) > 1:
-        assert lessons[1]["unlocked"] is False
+        assert lessons[1]["unlocked"] == False
 
 
 def test_get_lesson_with_questions(session, auth_headers):
@@ -121,7 +121,7 @@ def test_complete_lesson_all_correct(session, auth_headers):
     assert r.status_code == 200
     res = r.json()
     assert res["correct"] == len(qs)
-    assert res["perfect"] is True
+    assert res["perfect"] == True
     assert res["xp_earned"] == len(qs) * 10 + 5
     assert res["new_streak"] >= 1
     ach_names = [a["name"] for a in res["new_achievements"]]

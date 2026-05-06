@@ -92,7 +92,7 @@ export default function Practice() {
                 } else if (selected === i) style = "bg-violet-100 border-violet-500";
                 return (
                   <button
-                    key={i}
+                    key={`${q.id}-${i}`}
                     disabled={answered}
                     onClick={() => setSelected(i)}
                     className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-bold transition-all ${style}`}
