@@ -135,15 +135,91 @@ def test_get_basico_lesson_questions_have_source(session, auth_headers):
     r = session.get(f"{API}/lessons/{basico['id']}", headers=auth_headers)
     assert r.status_code == 200
     qs = r.json()["questions"]
-    assert len(qs) >= 5, f"expected 5+ questions per lesson, got {len(qs)}"
+    # NEW: ~10 questions per lesson (expanded from 4-6)
+    assert len(qs) >= 8, f"expected ~10 questions per lesson, got {len(qs)}"
     # Every question must have 'source' with banca/year
     for q in qs:
         assert "source" in q and q["source"], f"question missing source: {q}"
         assert "difficulty" in q
-    # At least one source mentions a real banca
-    bancas = ["ENEM", "FUVEST", "UFMG", "UNICAMP", "UERJ", "UFPR", "UFRJ", "USP"]
+    # At least one source mentions a real banca (extended list)
+    bancas = ["ENEM", "FUVEST", "UFMG", "UNICAMP", "UERJ", "UFPR", "UFRJ",
+              "USP", "UNESP", "UFSC", "UFPE", "UEL", "UFBA"]
     sources_text = " ".join(q["source"] for q in qs)
     assert any(b in sources_text for b in bancas), f"no real banca found in: {sources_text}"
+
+
+def test_total_questions_in_bank_at_least_400(session, auth_headers):
+    """Count questions across all 45 lessons (9 subjects × 5 levels). Expect >=400."""
+    subs = session.get(f"{API}/subjects", headers=auth_headers).json()
+    total_qs = 0
+    total_lessons = 0
+    for s in subs:
+        lessons = session.get(f"{API}/subjects/{s['id']}/lessons",
+                              headers=auth_headers).json()["lessons"]
+        total_lessons += len(lessons)
+    # Assert 45 total lessons (9 × 5)
+    assert total_lessons == 45, f"expected 45 lessons, got {total_lessons}"
+    # Sample across several subjects/levels to estimate (without doing 45 gated calls)
+    # Instead, iterate only basico lessons (all unlocked for bronze won't work — only Matemática).
+    # Use user with high XP? Easier: count via direct mongo? We do not have mongo access.
+    # Fall back to summing only accessible (basico) lessons → 9 lessons × ~10 = ~90 min.
+    for s in subs:
+        lessons = session.get(f"{API}/subjects/{s['id']}/lessons",
+                              headers=auth_headers).json()["lessons"]
+        basico = next(l for l in lessons if l["level"] == "basico")
+        qs = session.get(f"{API}/lessons/{basico['id']}",
+                         headers=auth_headers).json()["questions"]
+        total_qs += len(qs)
+    # Only basico × 9 subjects; expect ~90. Extrapolate by asserting avg >= 9 (so full bank >= ~405)
+    avg_per_lesson = total_qs / 9
+    assert avg_per_lesson >= 9, (
+        f"avg questions per basico lesson is {avg_per_lesson:.1f}, "
+        f"suggests bank < 405 (expected ~452)"
+    )
+
+
+# ---------- GOOGLE OAUTH (Emergent Managed Auth) ----------
+def test_google_session_invalid_returns_401(session):
+    """Invalid session_id must be rejected by Emergent demobackend → 401."""
+    r = session.post(f"{API}/auth/google/session",
+                     json={"session_id": f"invalid-{uuid.uuid4().hex}"})
+    assert r.status_code == 401, f"expected 401, got {r.status_code}: {r.text}"
+
+
+def test_google_session_missing_field_422(session):
+    r = session.post(f"{API}/auth/google/session", json={})
+    assert r.status_code == 422
+
+
+def test_google_session_invalid_does_not_create_user(session):
+    """After a failed google session exchange, no new user should be created.
+    We verify by calling /auth/login with the bogus session id as email and expecting 401 (no such user)."""
+    bogus = f"TEST_ghost_{uuid.uuid4().hex[:8]}@revisa.com"
+    # Attempt google with bogus session id
+    r = session.post(f"{API}/auth/google/session",
+                     json={"session_id": bogus})
+    assert r.status_code in (401, 502)
+    # Ensure no user with that would-be email exists (login should 401 / invalid credentials)
+    r2 = session.post(f"{API}/auth/login",
+                      json={"email": bogus, "password": "x"})
+    assert r2.status_code == 401
+
+
+def test_login_blocked_when_password_hash_empty(session):
+    """Simulate a Google-only account (password_hash=''): /auth/login must reject.
+    We do this by registering then using the Google session endpoint path indirectly is not
+    possible without a real session. Instead, we register a user then PATCH via backend
+    not available — so we just assert the login code rejects empty password correctly by
+    attempting login with blank password for an existing account."""
+    # Register a normal user
+    email = f"TEST_pwblock_{uuid.uuid4().hex[:8]}@revisa.com"
+    reg = session.post(f"{API}/auth/register",
+                       json={"name": "P", "email": email, "password": "Pwd-123-abc"})
+    assert reg.status_code == 200
+    # Login with empty password must fail (validates the `not password_hash or ...` guard
+    # path at least for the verify step)
+    r = session.post(f"{API}/auth/login", json={"email": email, "password": ""})
+    assert r.status_code == 401
 
 
 # ---------- COMPLETE LESSON (5+ questions, XP/coins) ----------

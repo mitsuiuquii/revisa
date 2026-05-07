@@ -2,6 +2,7 @@ import { Link, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../lib/auth";
 import { Sparkles, Flame, Trophy } from "lucide-react";
+import GoogleButton from "../components/GoogleButton";
 
 const LOGO = "https://customer-assets.emergentagent.com/job_3deef2eb-e33c-4bae-ab9e-1ab16146e6a5/artifacts/durmzo7q_ChatGPT%20Image%206%20de%20mai.%20de%202026%2C%2008_15_49.png";
 
@@ -60,15 +61,14 @@ export default function Welcome() {
         </div>
 
         <div className="mt-auto pt-10 space-y-3">
+          <GoogleButton testId="welcome-cta-google" label="Continuar com Google" />
           <Link to="/register" className="block">
             <button className="btn-tactile btn-primary-revisa w-full text-lg" data-testid="welcome-cta-register">
-              Começar agora
+              Criar conta com e-mail
             </button>
           </Link>
-          <Link to="/login" className="block">
-            <button className="btn-tactile btn-secondary-revisa w-full text-lg" data-testid="welcome-cta-login">
-              Já tenho conta
-            </button>
+          <Link to="/login" className="block text-center text-slate-700 font-bold text-sm pt-1">
+            Já tenho conta
           </Link>
         </div>
       </div>

@@ -12,6 +12,8 @@ import Achievements from "@/pages/Achievements";
 import Leaderboard from "@/pages/Leaderboard";
 import Profile from "@/pages/Profile";
 import Practice from "@/pages/Practice";
+import AuthCallback from "@/pages/AuthCallback";
+import Admin from "@/pages/Admin";
 import Protected from "@/components/Protected";
 
 function App() {
@@ -24,6 +26,8 @@ function App() {
             <Route path="/" element={<Welcome />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="/home" element={<Protected><Home /></Protected>} />
             <Route path="/trail/:subjectId" element={<Protected><Trail /></Protected>} />
             <Route path="/lesson/:lessonId" element={<Protected><Lesson /></Protected>} />

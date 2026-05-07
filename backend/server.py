@@ -18,6 +18,7 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+ADMIN_SECRET = os.environ.get('ADMIN_SECRET', 'revisa@admin2025')
 
 app = FastAPI(title="REVISA API")
 api_router = APIRouter(prefix="/api")
@@ -125,13 +126,65 @@ async def register(data: UserRegister):
 @api_router.post("/auth/login")
 async def login(data: UserLogin):
     u = await db.users.find_one({"email": data.email.lower()})
-    if not u or not verify_password(data.password, u["password_hash"]):
+    if not u or not u.get("password_hash") or not verify_password(data.password, u["password_hash"]):
         raise HTTPException(status_code=401, detail="E-mail ou senha incorretos")
     return {"token": create_token(u["id"]), "user": public_user(u)}
 
 @api_router.get("/auth/me")
 async def me(user=Depends(get_current_user)):
     return public_user(user)
+
+
+# ============= GOOGLE OAUTH (Emergent Managed) =============
+import requests as _req
+
+class GoogleSessionRequest(BaseModel):
+    session_id: str
+
+@api_router.post("/auth/google/session")
+async def google_session(req: GoogleSessionRequest):
+    """Exchange Emergent Auth session_id for our own JWT.
+    Creates or updates the user and returns {token, user} like /auth/login."""
+    try:
+        r = _req.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": req.session_id},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            raise HTTPException(status_code=401, detail="Sessão Google inválida")
+        data = r.json()
+    except _req.RequestException:
+        raise HTTPException(status_code=502, detail="Erro ao contatar Emergent Auth")
+
+    email = (data.get("email") or "").lower()
+    name = data.get("name") or email.split("@")[0]
+    picture = data.get("picture")
+    if not email:
+        raise HTTPException(status_code=400, detail="Conta Google sem e-mail")
+
+    user = await db.users.find_one({"email": email})
+    if user:
+        updates = {"google_linked": True}
+        if picture and not user.get("picture"):
+            updates["picture"] = picture
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    else:
+        uid = str(uuid.uuid4())
+        colors = ["#8B5CF6", "#F97316", "#EAB308", "#22C55E", "#EF4444", "#3B82F6"]
+        user = {
+            "id": uid, "name": name, "email": email,
+            "password_hash": "",  # Google-only account (cannot login via /auth/login)
+            "xp": 0, "lives": 5, "streak": 0, "coins": 15, "last_active": None,
+            "completed_lessons": [], "achievements": [],
+            "avatar_color": colors[hash(uid) % len(colors)],
+            "picture": picture, "google_linked": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+
+    return {"token": create_token(user["id"]), "user": public_user(user)}
 
 
 # ============= META =============
@@ -341,6 +394,63 @@ async def ai_question(req: AIQuestionRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Erro: {e}")
 
 
+# ============= ADMIN =============
+class AdminLogin(BaseModel):
+    password: str
+
+@api_router.post("/admin/login")
+async def admin_login(data: AdminLogin):
+    if data.password != ADMIN_SECRET:
+        raise HTTPException(status_code=401, detail="Senha de admin inválida")
+    token = jwt.encode(
+        {"sub": "admin", "role": "admin", "exp": datetime.now(timezone.utc) + timedelta(hours=8)},
+        JWT_SECRET, algorithm=JWT_ALGORITHM
+    )
+    return {"token": token}
+
+async def require_admin(creds: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Acesso negado")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Token de admin inválido")
+
+@api_router.get("/admin/users")
+async def admin_list_users(_=Depends(require_admin)):
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(1000)
+    for u in users:
+        rank = rank_for_xp(u.get("xp", 0))
+        u["rank"] = rank
+    return users
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, _=Depends(require_admin)):
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return {"ok": True}
+
+@api_router.get("/admin/stats")
+async def admin_stats(_=Depends(require_admin)):
+    total_users = await db.users.count_documents({})
+    total_lessons = await db.lessons.count_documents({})
+    total_questions = await db.questions.count_documents({})
+    today = date.today().isoformat()
+    active_today = await db.users.count_documents({"last_active": today})
+    pipeline = [{"$group": {"_id": None, "total_xp": {"$sum": "$xp"}, "avg_xp": {"$avg": "$xp"}}}]
+    xp_data = await db.users.aggregate(pipeline).to_list(1)
+    total_xp = int(xp_data[0]["total_xp"]) if xp_data else 0
+    avg_xp = int(xp_data[0]["avg_xp"]) if xp_data else 0
+    return {
+        "total_users": total_users,
+        "total_lessons": total_lessons,
+        "total_questions": total_questions,
+        "active_today": active_today,
+        "total_xp": total_xp,
+        "avg_xp": avg_xp,
+    }
+
 @api_router.post("/lives/refill")
 async def refill(user=Depends(get_current_user)):
     await db.users.update_one({"id": user["id"]}, {"$set": {"lives": 5}})
@@ -365,6 +475,11 @@ async def seed_database():
         has_fuvest = await db.lessons.find_one({"level": "fuvest"})
         if not has_fuvest:
             needs_reseed = True
+        else:
+            # Reseed if question count per lesson is too low (< 8 means old seed)
+            total_qs = await db.questions.count_documents({})
+            if total_qs < 300:
+                needs_reseed = True
     if needs_reseed:
         await db.subjects.delete_many({})
         await db.lessons.delete_many({})

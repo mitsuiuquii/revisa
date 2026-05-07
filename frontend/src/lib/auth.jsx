@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
     try { return JSON.parse(localStorage.getItem("revisa_user") || "null"); }
     catch { return null; }
   });
+  // Only show loading if there's a token to validate
   const [loading, setLoading] = useState(!!localStorage.getItem("revisa_token"));
 
   const refreshUser = useCallback(async () => {
@@ -17,15 +18,23 @@ export function AuthProvider({ children }) {
       localStorage.setItem("revisa_user", JSON.stringify(data));
       return data;
     } catch {
+      // Token inválido — limpa tudo
+      localStorage.removeItem("revisa_token");
+      localStorage.removeItem("revisa_user");
+      setUser(null);
       return null;
     }
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem("revisa_token")) {
-      refreshUser().finally(() => setLoading(false));
-    }
-  }, [refreshUser]);
+  const token = localStorage.getItem("revisa_token");
+
+  if (token) {
+    refreshUser().finally(() => setLoading(false));
+  } else {
+    setLoading(false);
+  }
+}, [refreshUser]);
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
@@ -43,12 +52,12 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem("revisa_token");
-    localStorage.removeItem("revisa_user");
-    setUser(null);
-  };
-
+ const logout = () => {
+  localStorage.removeItem("revisa_token");
+  localStorage.removeItem("revisa_user");
+  sessionStorage.removeItem("revisa_admin");
+  setUser(null);
+};
   return (
     <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, refreshUser }}>
       {children}

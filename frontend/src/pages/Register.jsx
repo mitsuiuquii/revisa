@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
+import GoogleButton from "../components/GoogleButton";
 
 export default function Register() {
   const { register } = useAuth();
@@ -64,6 +65,13 @@ export default function Register() {
             {busy ? "Criando…" : "Criar conta"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-slate-300" />
+          <span className="text-xs uppercase tracking-widest font-extrabold text-slate-500">ou</span>
+          <div className="flex-1 h-px bg-slate-300" />
+        </div>
+        <GoogleButton testId="register-google-btn" label="Cadastrar com Google" />
 
         <p className="mt-6 text-center text-slate-700 font-bold">
           Já tem conta?{" "}

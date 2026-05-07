@@ -433,3 +433,15 @@ ACHIEVEMENTS_SEED = [
     {"name": "Patente Diamante","description": "Alcance Diamante",                     "icon": "Diamond",  "color": "#60A5FA", "type": "rank",    "threshold": 4,  "order": 14},
     {"name": "Sábio Lendário",  "description": "Alcance a patente máxima: Sábio",      "icon": "Crown",    "color": "#A855F7", "type": "rank",    "threshold": 5,  "order": 15},
 ]
+
+
+# Merge extra questions from seed_extra.py
+try:
+    from seed_extra import EXTRA_QUESTIONS
+    for _subj, _levels in EXTRA_QUESTIONS.items():
+        if _subj not in QUESTION_BANK:
+            continue
+        for _lvl, _qs in _levels.items():
+            QUESTION_BANK[_subj].setdefault(_lvl, []).extend(_qs)
+except ImportError:
+    pass
