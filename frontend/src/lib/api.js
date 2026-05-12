@@ -17,7 +17,9 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       localStorage.removeItem("revisa_token");
       localStorage.removeItem("revisa_user");
-      if (!window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/register") && window.location.pathname !== "/") {
+      // Não redireciona para /login se estiver em /admin (painel admin)
+      const isAdminPanel = window.location.pathname.startsWith("/admin");
+      if (!isAdminPanel && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/register") && window.location.pathname !== "/") {
         window.location.href = "/login";
       }
     }

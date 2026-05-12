@@ -77,6 +77,22 @@ class AIQuestionRequest(BaseModel):
 class UsePowerRequest(BaseModel):
     power_id: str
 
+# Admin models
+class AdminCreateQuestion(BaseModel):
+    lesson_id: str
+    prompt: str
+    options: List[str]
+    correct_index: int
+    explanation: str
+    source: Optional[str] = None
+
+class AdminUpdateQuestion(BaseModel):
+    prompt: Optional[str] = None
+    options: Optional[List[str]] = None
+    correct_index: Optional[int] = None
+    explanation: Optional[str] = None
+    source: Optional[str] = None
+
 # ============= HELPERS =============
 def hash_password(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
 def verify_password(p, h): return bcrypt.checkpw(p.encode(), h.encode())
@@ -145,45 +161,61 @@ class GoogleSessionRequest(BaseModel):
 async def google_session(req: GoogleSessionRequest):
     """Exchange Emergent Auth session_id for our own JWT.
     Creates or updates the user and returns {token, user} like /auth/login."""
+    logger.info(f"📱 Tentativa de login com Google - session_id: {req.session_id[:20]}...")
+    
     try:
         r = _req.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
             headers={"X-Session-ID": req.session_id},
             timeout=10,
         )
+        logger.info(f"   Resposta Emergent: {r.status_code}")
+        
         if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Sessão Google inválida")
+            logger.error(f"   ❌ Erro: {r.text}")
+            raise HTTPException(status_code=401, detail="Sessão Google inválida ou expirada")
+        
         data = r.json()
-    except _req.RequestException:
-        raise HTTPException(status_code=502, detail="Erro ao contatar Emergent Auth")
+        logger.info(f"   ✅ Dados recebidos: {data}")
+    except _req.RequestException as e:
+        logger.error(f"   ❌ Erro de conexão com Emergent: {e}")
+        raise HTTPException(status_code=502, detail="Erro ao contatar servidor de autenticação")
 
     email = (data.get("email") or "").lower()
     name = data.get("name") or email.split("@")[0]
     picture = data.get("picture")
+    
     if not email:
+        logger.error("   ❌ Conta Google sem e-mail!")
         raise HTTPException(status_code=400, detail="Conta Google sem e-mail")
 
+    logger.info(f"   👤 Usuário: {name} ({email})")
+    
     user = await db.users.find_one({"email": email})
     if user:
-        updates = {"google_linked": True}
+        logger.info(f"   ✅ Usuário existente encontrado")
+        updates = {"google_linked": True, "last_active": datetime.now(timezone.utc).isoformat()}
         if picture and not user.get("picture"):
             updates["picture"] = picture
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
         user = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
     else:
+        logger.info(f"   🆕 Criando novo usuário")
         uid = str(uuid.uuid4())
         colors = ["#8B5CF6", "#F97316", "#EAB308", "#22C55E", "#EF4444", "#3B82F6"]
         user = {
             "id": uid, "name": name, "email": email,
             "password_hash": "",  # Google-only account (cannot login via /auth/login)
-            "xp": 0, "lives": 5, "streak": 0, "coins": 15, "last_active": None,
+            "xp": 0, "lives": 5, "streak": 0, "coins": 15, "last_active": datetime.now(timezone.utc).isoformat(),
             "completed_lessons": [], "achievements": [],
             "avatar_color": colors[hash(uid) % len(colors)],
             "picture": picture, "google_linked": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
+        logger.info(f"   ✅ Usuário criado com sucesso")
 
+    logger.info(f"   ✅ Login com Google concluído!")
     return {"token": create_token(user["id"]), "user": public_user(user)}
 
 
@@ -196,32 +228,30 @@ async def meta_ranks():
 
 # ============= SUBJECTS =============
 @api_router.get("/subjects")
-async def list_subjects(user=Depends(get_current_user)):
+async def list_subjects():
     subjects = await db.subjects.find({}, {"_id": 0}).sort("order", 1).to_list(100)
-    completed = set(user.get("completed_lessons", []))
+    # Adiciona informações básicas de cada matéria
     for s in subjects:
         lessons = await db.lessons.find({"subject_id": s["id"]}, {"_id": 0, "id": 1}).to_list(100)
         s["total_lessons"] = len(lessons)
-        s["completed_lessons"] = sum(1 for l in lessons if l["id"] in completed)
-        s["progress"] = int((s["completed_lessons"] / s["total_lessons"]) * 100) if s["total_lessons"] else 0
+        s["completed_lessons"] = 0  # Sem usuário autenticado, 0 completadas
+        s["progress"] = 0
     return subjects
 
 @api_router.get("/subjects/{subject_id}/lessons")
-async def list_lessons(subject_id: str, user=Depends(get_current_user)):
+async def list_lessons(subject_id: str):
     subject = await db.subjects.find_one({"id": subject_id}, {"_id": 0})
-    if not subject: raise HTTPException(status_code=404, detail="Matéria não encontrada")
+    if not subject: 
+        raise HTTPException(status_code=404, detail="Matéria não encontrada")
+    
     lessons = await db.lessons.find({"subject_id": subject_id}, {"_id": 0}).sort("order", 1).to_list(100)
-    completed = set(user.get("completed_lessons", []))
-    user_rank = rank_for_xp(user.get("xp", 0))["id"]
-    # Group by level, lessons unlock progressively within a level if level itself is unlocked
-    for i, l in enumerate(lessons):
-        l["completed"] = l["id"] in completed
-        lvl_ok = level_unlocked(l.get("level", "basico"), user_rank)
-        prev_done = i == 0 or lessons[i-1]["id"] in completed or lessons[i-1].get("level") != l.get("level")
-        l["unlocked"] = lvl_ok and prev_done
-        l["level_label"] = LEVEL_LABELS.get(l.get("level", "basico"), l.get("level"))
-        l["required_rank"] = LEVEL_RANK_REQUIRED.get(l.get("level", "basico"), "bronze")
-    return {"subject": subject, "lessons": lessons}
+    
+    # Adiciona contagem de questões para cada lição
+    for lesson in lessons:
+        questions_count = await db.questions.count_documents({"lesson_id": lesson["id"]})
+        lesson["questions_count"] = questions_count
+    
+    return lessons
 
 @api_router.get("/lessons/{lesson_id}")
 async def get_lesson(lesson_id: str, user=Depends(get_current_user)):
@@ -357,12 +387,13 @@ async def list_achievements(user=Depends(get_current_user)):
     return items
 
 @api_router.get("/leaderboard")
-async def leaderboard(user=Depends(get_current_user)):
-    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "xp": 1, "streak": 1, "avatar_color": 1, "coins": 1}).sort("xp", -1).limit(50).to_list(50)
+async def leaderboard():
+    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "xp": 1, "streak": 1, "avatar_color": 1, "rank": 1}).sort("xp", -1).limit(50).to_list(50)
     for i, u in enumerate(users):
         u["rank_position"] = i + 1
-        u["is_me"] = u["id"] == user["id"]
-        u["tier"] = rank_for_xp(u.get("xp", 0))
+        # Calcula a patente se não existir
+        if "rank" not in u or not u.get("rank"):
+            u["rank"] = rank_for_xp(u.get("xp", 0))
     return users
 
 
@@ -451,6 +482,79 @@ async def admin_stats(_=Depends(require_admin)):
         "avg_xp": avg_xp,
     }
 
+# ============= ADMIN QUESTIONS =============
+@api_router.get("/admin/lessons/{lesson_id}/questions")
+async def admin_list_questions(lesson_id: str, _=Depends(require_admin)):
+    """Lista todas as questões de uma lição."""
+    lesson = await db.lessons.find_one({"id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lição não encontrada")
+    
+    questions = await db.questions.find({"lesson_id": lesson_id}, {"_id": 0}).sort("order", 1).to_list(100)
+    return questions
+
+@api_router.post("/admin/questions")
+async def admin_create_question(req: AdminCreateQuestion, _=Depends(require_admin)):
+    """Cria uma nova questão em uma lição."""
+    lesson = await db.lessons.find_one({"id": req.lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lição não encontrada")
+    
+    # Encontra a maior ordem atual
+    last_question = await db.questions.find_one({"lesson_id": req.lesson_id}, sort=[("order", -1)], projection={"_id": 0})
+    order = (last_question.get("order", -1) + 1) if last_question else 0
+    
+    question_doc = {
+        "id": str(uuid.uuid4()),
+        "lesson_id": req.lesson_id,
+        "content_name": lesson.get("content_name"),
+        "level": lesson.get("level"),
+        "difficulty": lesson.get("level"),
+        "order": order,
+        "prompt": req.prompt,
+        "options": req.options,
+        "correct_index": req.correct_index,
+        "explanation": req.explanation,
+        "source": req.source or "Admin",
+    }
+    
+    await db.questions.insert_one(question_doc)
+    return question_doc
+
+@api_router.put("/admin/questions/{question_id}")
+async def admin_update_question(question_id: str, req: AdminUpdateQuestion, _=Depends(require_admin)):
+    """Atualiza uma questão existente."""
+    question = await db.questions.find_one({"id": question_id}, {"_id": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail="Questão não encontrada")
+    
+    update_data = {}
+    if req.prompt is not None:
+        update_data["prompt"] = req.prompt
+    if req.options is not None:
+        update_data["options"] = req.options
+    if req.correct_index is not None:
+        update_data["correct_index"] = req.correct_index
+    if req.explanation is not None:
+        update_data["explanation"] = req.explanation
+    if req.source is not None:
+        update_data["source"] = req.source
+    
+    if update_data:
+        await db.questions.update_one({"id": question_id}, {"$set": update_data})
+    
+    # Retorna a questão atualizada
+    updated = await db.questions.find_one({"id": question_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/admin/questions/{question_id}")
+async def admin_delete_question(question_id: str, _=Depends(require_admin)):
+    """Deleta uma questão."""
+    result = await db.questions.delete_one({"id": question_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Questão não encontrada")
+    return {"ok": True}
+
 @api_router.post("/lives/refill")
 async def refill(user=Depends(get_current_user)):
     await db.users.update_one({"id": user["id"]}, {"$set": {"lives": 5}})
@@ -516,3 +620,13 @@ app.add_middleware(CORSMiddleware,
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

@@ -26,18 +26,34 @@ export default function AuthCallback() {
 
     (async () => {
       try {
+        console.log("🔐 Enviando session_id para backend...", sessionId.substring(0, 20) + "...");
         const { data } = await api.post("/auth/google/session", { session_id: sessionId });
+        
+        console.log("✅ Login com Google bem-sucedido!", data.user);
         localStorage.setItem("revisa_token", data.token);
         localStorage.setItem("revisa_user", JSON.stringify(data.user));
         setUser(data.user);
+        
         // Clear the hash and go home
         window.history.replaceState(null, "", window.location.pathname);
-        toast.success("Bem-vindo ao REVISA! 🎉");
-        nav("/home", { replace: true });
+        toast.success(`Bem-vindo ao REVISA, ${data.user.name}! 🎉`);
+        
+        // Pequeno delay para mensagem aparecer
+        setTimeout(() => {
+          nav("/home", { replace: true });
+        }, 1000);
       } catch (err) {
+        console.error("❌ Erro no login com Google:", err);
+        console.error("   Status:", err.response?.status);
+        console.error("   Mensagem:", err.response?.data?.detail || err.message);
+        
         setMsg("Falhou. Redirecionando…");
-        toast.error(err.response?.data?.detail || "Erro no login com Google");
-        nav("/login", { replace: true });
+        const errorMsg = err.response?.data?.detail || err.message || "Erro desconhecido no login com Google";
+        toast.error(errorMsg);
+        
+        setTimeout(() => {
+          nav("/login", { replace: true });
+        }, 2000);
       }
     })();
   }, [nav, setUser]);
