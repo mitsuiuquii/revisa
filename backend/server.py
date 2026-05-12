@@ -454,20 +454,31 @@ class AdminLogin(BaseModel):
 
 @api_router.post("/admin/login")
 async def admin_login(data: AdminLogin):
+    logger.info(f"🔑 Tentativa de login admin com senha...")
     if data.password != ADMIN_SECRET:
+        logger.warning(f"❌ Senha incorreta. Esperada: {ADMIN_SECRET}, recebida: {data.password}")
         raise HTTPException(status_code=401, detail="Senha de admin inválida")
+    logger.info(f"✅ Senha correta! Gerando token admin...")
     token = jwt.encode(
         {"sub": "admin", "role": "admin", "exp": datetime.now(timezone.utc) + timedelta(hours=8)},
         JWT_SECRET, algorithm=JWT_ALGORITHM
     )
+    logger.info(f"🔐 Token gerado com sucesso")
     return {"token": token}
 
 async def require_admin(creds: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        if payload.get("role") != "admin":
-            raise HTTPException(status_code=403, detail="Acesso negado")
-    except jwt.PyJWTError:
+        role = payload.get("role")
+        logger.info(f"🔐 Token recebido. Role: {role}")
+        if role != "admin":
+            logger.warning(f"⚠️ Acesso negado. Role esperada: 'admin', recebida: '{role}'")
+            raise HTTPException(status_code=403, detail="Acesso negado - role inválida")
+    except jwt.ExpiredSignatureError:
+        logger.error("❌ Token expirado")
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.PyJWTError as e:
+        logger.error(f"❌ Token inválido: {str(e)}")
         raise HTTPException(status_code=401, detail="Token de admin inválido")
 
 @api_router.get("/admin/users")

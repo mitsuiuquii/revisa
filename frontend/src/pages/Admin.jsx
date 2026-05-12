@@ -844,28 +844,52 @@ export default function Admin() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
+      // Debug: log do token
+      const token = localStorage.getItem("revisa_token");
+      console.log("🔐 Token armazenado:", token ? "✓ Sim" : "✗ Não");
+      
       // Agora usa api (axios) com token JWT armazenado em localStorage
       const [usersRes, subsRes] = await Promise.allSettled([
         api.get("/admin/users"),
         api.get("/subjects"),
       ]);
 
+      // Log dos resultados
+      console.log("📊 Admin Users Response:", usersRes.status, usersRes.reason?.response?.status);
+      console.log("📚 Subjects Response:", subsRes.status);
+
       if (usersRes.status === "fulfilled" && Array.isArray(usersRes.value.data)) {
         setUsers(usersRes.value.data);
+        console.log("✓ Usuários carregados:", usersRes.value.data.length);
       } else {
+        console.warn("⚠️ /admin/users falhou:", usersRes.reason?.response?.status, usersRes.reason?.response?.data?.detail);
         // Fallback: leaderboard
         try {
           const { data } = await api.get("/leaderboard");
-          if (Array.isArray(data)) setUsers(data);
-        } catch {
+          if (Array.isArray(data)) {
+            setUsers(data);
+            console.log("✓ Leaderboard carregado como fallback:", data.length);
+          } else {
+            setUsers([]);
+            console.warn("⚠️ Leaderboard não retornou array");
+          }
+        } catch (err) {
+          setUsers([]);
+          console.error("✗ Erro ao carregar leaderboard:", err.response?.status);
           toast.error("Erro ao carregar usuários");
         }
       }
 
       if (subsRes.status === "fulfilled" && Array.isArray(subsRes.value.data)) {
         setSubjects(subsRes.value.data);
+        console.log("✓ Matérias carregadas:", subsRes.value.data.length);
+      } else {
+        setSubjects([]);
+        console.error("✗ Erro ao carregar matérias:", subsRes.reason?.response?.status);
       }
     } catch (err) {
+      setUsers([]);
+      setSubjects([]);
       toast.error("Erro ao carregar dados. Verifique sua autenticação.");
       console.error("Fetch error:", err);
     } finally {
