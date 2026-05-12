@@ -35,14 +35,30 @@ function AdminLogin({ onLogin }) {
     setBusy(true);
     setErr("");
     try {
+      console.log("🔑 Enviando senha para /admin/login...");
       const { data } = await api.post("/admin/login", { password: ADMIN_PASSWORD });
+      const token = data.token;
+      console.log("✅ Login bem-sucedido! Token recebido");
+      console.log("🔐 Token (primeiros 50 chars):", token.substring(0, 50) + "...");
+      
+      // Decodifica o token localmente para verificar o payload (sem validar assinatura)
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          console.log("📊 Payload do token:", payload);
+        }
+      } catch (e) {
+        console.warn("⚠️ Não foi possível decodificar token localmente");
+      }
+      
       // Armazena o token JWT retornado pelo backend
-      localStorage.setItem("revisa_token", data.token);
+      localStorage.setItem("revisa_token", token);
       sessionStorage.setItem("revisa_admin", "1");
       onLogin();
     } catch (err) {
       setErr("Acesso ao painel admin negado. Verifique as credenciais.");
-      console.error("Admin login error:", err);
+      console.error("Admin login error:", err.response?.status, err.response?.data);
     } finally {
       setBusy(false);
     }

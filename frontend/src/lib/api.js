@@ -7,7 +7,13 @@ export const api = axios.create({ baseURL: API });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("revisa_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+    // Debug: log do token being enviado
+    if (config.url.includes("admin")) {
+      console.log(`📤 Enviando request para ${config.url} com token (primeiros 30 chars): ${token.substring(0, 30)}...`);
+    }
+  }
   return config;
 });
 

@@ -606,6 +606,16 @@ async def refill(user=Depends(get_current_user)):
 @api_router.get("/")
 async def root(): return {"message": "REVISA API"}
 
+@api_router.get("/debug/jwt")
+async def debug_jwt():
+    """Endpoint de debug para verificar JWT_SECRET e ADMIN_SECRET"""
+    logger.info(f"🔍 Debug JWT solicitado")
+    return {
+        "jwt_secret_configured": bool(JWT_SECRET),
+        "jwt_secret_first_20": JWT_SECRET[:20] if JWT_SECRET else "NOT SET",
+        "admin_secret_configured": bool(ADMIN_SECRET),
+        "admin_secret_first_20": ADMIN_SECRET[:20] if ADMIN_SECRET else "NOT SET",
+    }
 
 # ============= SEED =============
 from seed_data import SUBJECTS_SEED, QUESTION_BANK, ACHIEVEMENTS_SEED, LEVELS as SEED_LEVELS
