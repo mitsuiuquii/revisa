@@ -27,6 +27,12 @@ security = HTTPBearer()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Log inicial de verificação
+logger.info(f"🚀 REVISA Backend iniciado")
+logger.info(f"🔑 ADMIN_SECRET configurado: {'✓ Sim' if ADMIN_SECRET else '✗ Não'}")
+logger.info(f"🔐 JWT_SECRET configurado: {'✓ Sim' if JWT_SECRET else '✗ Não'}")
+logger.info(f"📊 DB_NAME: {os.environ.get('DB_NAME')}")
+
 # ============= RANKS =============
 RANKS = [
     {"id": "bronze",   "name": "Bronze",   "min_xp": 0,    "color": "#A16207", "icon": "Medal"},
@@ -455,22 +461,25 @@ class AdminLogin(BaseModel):
 @api_router.post("/admin/login")
 async def admin_login(data: AdminLogin):
     logger.info(f"🔑 Tentativa de login admin com senha...")
+    logger.debug(f"🔍 Validando: senha recebida vs ADMIN_SECRET configurado")
     if data.password != ADMIN_SECRET:
-        logger.warning(f"❌ Senha incorreta. Esperada: {ADMIN_SECRET}, recebida: {data.password}")
+        logger.warning(f"❌ Senha incorreta")
         raise HTTPException(status_code=401, detail="Senha de admin inválida")
     logger.info(f"✅ Senha correta! Gerando token admin...")
+    logger.debug(f"🔐 Usando JWT_SECRET (primeiros 20 chars): {JWT_SECRET[:20]}...")
     token = jwt.encode(
         {"sub": "admin", "role": "admin", "exp": datetime.now(timezone.utc) + timedelta(hours=8)},
         JWT_SECRET, algorithm=JWT_ALGORITHM
     )
-    logger.info(f"🔐 Token gerado com sucesso")
+    logger.info(f"🔐 Token gerado com sucesso. Token (primeiros 50 chars): {token[:50]}...")
     return {"token": token}
 
 async def require_admin(creds: HTTPAuthorizationCredentials = Depends(security)):
     try:
+        logger.debug(f"🔍 Decodificando token com JWT_SECRET (primeiros 20 chars): {JWT_SECRET[:20]}...")
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         role = payload.get("role")
-        logger.info(f"🔐 Token recebido. Role: {role}")
+        logger.info(f"🔐 Token recebido. Payload: {payload}")
         if role != "admin":
             logger.warning(f"⚠️ Acesso negado. Role esperada: 'admin', recebida: '{role}'")
             raise HTTPException(status_code=403, detail="Acesso negado - role inválida")

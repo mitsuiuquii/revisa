@@ -323,10 +323,13 @@ function SubjectsTab({ subjects }) {
     setLoading(prev => ({ ...prev, [subjectId]: true }));
     try {
       const { data } = await api.get(`/subjects/${subjectId}/lessons`);
-      setLessons(prev => ({ ...prev, [subjectId]: data }));
+      // Agora o endpoint retorna {subject, lessons}
+      const lessonsArray = Array.isArray(data) ? data : data.lessons || [];
+      setLessons(prev => ({ ...prev, [subjectId]: lessonsArray }));
       setExpanded(subjectId);
     } catch (err) {
       toast.error(`Erro ao carregar lições de ${subjectName}`);
+      setLessons(prev => ({ ...prev, [subjectId]: [] }));
     } finally {
       setLoading(prev => ({ ...prev, [subjectId]: false }));
     }
@@ -464,8 +467,11 @@ function QuestionsTab({ subjects }) {
     setLoading(true);
     try {
       const { data } = await api.get(`/subjects/${subjectId}/lessons`);
-      setLessons(data);
+      // Agora o endpoint retorna {subject, lessons}
+      const lessonsArray = Array.isArray(data) ? data : data.lessons || [];
+      setLessons(lessonsArray);
     } catch (err) {
+      setLessons([]);
       toast.error("Erro ao carregar lições");
     } finally {
       setLoading(false);
