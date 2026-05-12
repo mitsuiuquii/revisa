@@ -239,19 +239,42 @@ async def list_subjects():
     return subjects
 
 @api_router.get("/subjects/{subject_id}/lessons")
-async def list_lessons(subject_id: str):
+async def list_lessons(subject_id: str, creds: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     subject = await db.subjects.find_one({"id": subject_id}, {"_id": 0})
     if not subject: 
         raise HTTPException(status_code=404, detail="Matéria não encontrada")
     
+    # Tenta obter o usuário se autenticado
+    user = None
+    user_rank_id = "bronze"
+    completed_lessons = set()
+    
+    if creds:
+        try:
+            uid = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]).get("sub")
+            user = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+            if user:
+                user_rank_id = rank_for_xp(user.get("xp", 0))["id"]
+                completed_lessons = set(user.get("completed_lessons", []))
+        except jwt.PyJWTError:
+            pass
+    
     lessons = await db.lessons.find({"subject_id": subject_id}, {"_id": 0}).sort("order", 1).to_list(100)
     
-    # Adiciona contagem de questões para cada lição
+    # Enriquece cada lição com informações
     for lesson in lessons:
         questions_count = await db.questions.count_documents({"lesson_id": lesson["id"]})
         lesson["questions_count"] = questions_count
+        
+        # Adiciona nível em português
+        lesson["level_label"] = LEVEL_LABELS.get(lesson.get("level", "basico"), "Fundamental")
+        lesson["required_rank"] = LEVEL_RANK_REQUIRED.get(lesson.get("level", "basico"), "bronze")
+        
+        # Adiciona status de desbloqueio e conclusão
+        lesson["unlocked"] = level_unlocked(lesson.get("level", "basico"), user_rank_id)
+        lesson["completed"] = lesson["id"] in completed_lessons
     
-    return lessons
+    return {"subject": subject, "lessons": lessons}
 
 @api_router.get("/lessons/{lesson_id}")
 async def get_lesson(lesson_id: str, user=Depends(get_current_user)):
