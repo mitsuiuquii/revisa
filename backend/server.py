@@ -461,6 +461,8 @@ class AdminLogin(BaseModel):
 @api_router.post("/admin/login")
 async def admin_login(data: AdminLogin):
     logger.info(f"🔑 Tentativa de login admin com senha...")
+    logger.info(f"🔍 JWT_SECRET hash: {hash(JWT_SECRET)}, tamanho: {len(JWT_SECRET)}")
+    logger.info(f"🔍 ADMIN_SECRET hash: {hash(ADMIN_SECRET)}, tamanho: {len(ADMIN_SECRET)}")
     logger.debug(f"🔍 Validando: senha recebida vs ADMIN_SECRET configurado")
     if data.password != ADMIN_SECRET:
         logger.warning(f"❌ Senha incorreta")
@@ -476,13 +478,15 @@ async def admin_login(data: AdminLogin):
 
 async def require_admin(creds: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        logger.debug(f"🔍 Decodificando token com JWT_SECRET (primeiros 20 chars): {JWT_SECRET[:20]}...")
+        logger.info(f"🔍 Decodificando token admin")
+        logger.debug(f"🔍 JWT_SECRET usado para decodificar - hash: {hash(JWT_SECRET)}, tamanho: {len(JWT_SECRET)}")
         payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         role = payload.get("role")
-        logger.info(f"🔐 Token recebido. Payload: {payload}")
+        logger.info(f"🔐 Token recebido e decodificado com sucesso. Payload: {payload}")
         if role != "admin":
             logger.warning(f"⚠️ Acesso negado. Role esperada: 'admin', recebida: '{role}'")
             raise HTTPException(status_code=403, detail="Acesso negado - role inválida")
+        logger.info(f"✅ Acesso admin concedido")
     except jwt.ExpiredSignatureError:
         logger.error("❌ Token expirado")
         raise HTTPException(status_code=401, detail="Token expirado")
@@ -606,16 +610,6 @@ async def refill(user=Depends(get_current_user)):
 @api_router.get("/")
 async def root(): return {"message": "REVISA API"}
 
-@api_router.get("/debug/jwt")
-async def debug_jwt():
-    """Endpoint de debug para verificar JWT_SECRET e ADMIN_SECRET"""
-    logger.info(f"🔍 Debug JWT solicitado")
-    return {
-        "jwt_secret_configured": bool(JWT_SECRET),
-        "jwt_secret_first_20": JWT_SECRET[:20] if JWT_SECRET else "NOT SET",
-        "admin_secret_configured": bool(ADMIN_SECRET),
-        "admin_secret_first_20": ADMIN_SECRET[:20] if ADMIN_SECRET else "NOT SET",
-    }
 
 # ============= SEED =============
 from seed_data import SUBJECTS_SEED, QUESTION_BANK, ACHIEVEMENTS_SEED, LEVELS as SEED_LEVELS
