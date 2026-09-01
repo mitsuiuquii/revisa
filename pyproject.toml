@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "revisa"
+version = "3.0.0"
+
+[tool.vercel]
+entrypoint = "api/index.py"
