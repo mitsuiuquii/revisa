@@ -1,0 +1,10 @@
+{
+  "name": "revisa",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && yarn install && yarn run build",
+    "start": "cd frontend && yarn start"
+  },
+  "devDependencies": {}
+}
