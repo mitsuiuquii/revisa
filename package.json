@@ -3,6 +3,6 @@
   "version": "3.0.0",
   "private": true,
   "scripts": {
-    "build": "cd frontend && yarn install && yarn run build"
+    "build": "yarn --cwd frontend install && yarn --cwd frontend build"
   }
 }
