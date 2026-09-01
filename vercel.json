@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "yarn --cwd frontend install",
-  "buildCommand": "yarn --cwd frontend build",
-  "outputDirectory": "frontend/build",
+  "buildCommand": "yarn --cwd frontend build && rm -rf build && cp -R frontend/build build",
+  "outputDirectory": "build",
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
