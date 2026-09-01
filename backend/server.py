@@ -659,10 +659,18 @@ async def seed_database():
 
 
 app.include_router(api_router)
+
+# CORS Configuration
+cors_origins = [origin.strip() for origin in os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')]
+logger.info(f"✅ CORS Origins configurados: {cors_origins}")
+
 app.add_middleware(CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"], allow_headers=["*"])
+    allow_origins=cors_origins,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
