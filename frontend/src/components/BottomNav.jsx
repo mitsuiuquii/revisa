@@ -20,7 +20,7 @@ export default function BottomNav() {
             data-testid={it.testid}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center gap-0.5 py-2 mx-0.5 rounded-2xl transition-colors ${
-                isActive ? "bg-violet-500 text-white" : "text-slate-700 hover:bg-slate-100"
+                isActive ? "bg-gradient-to-br from-blue-600 to-purple-600 text-white shadow-md" : "text-slate-700 hover:bg-slate-100"
               }`
             }
           >

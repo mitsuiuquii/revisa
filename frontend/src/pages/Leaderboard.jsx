@@ -9,7 +9,7 @@ export default function Leaderboard() {
   const [list, setList] = useState([]);
   useEffect(() => { api.get("/leaderboard").then(({ data }) => setList(data)); }, []);
 
-  const medalColor = (rank) => rank === 1 ? "#EAB308" : rank === 2 ? "#94A3B8" : rank === 3 ? "#F97316" : "#E2E8F0";
+  const medalColor = (rank) => rank === 1 ? "#FFDE59" : rank === 2 ? "#94A3B8" : rank === 3 ? "#FF751F" : "#E2E8F0";
 
   return (
     <Layout>
@@ -23,7 +23,7 @@ export default function Leaderboard() {
             <motion.div key={u.id}
               initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
               transition={{ delay: i * 0.03 }}
-              className={`tactile-card p-3 flex items-center gap-3 ${u.is_me ? "bg-violet-50 border-violet-500" : ""}`}
+              className={`tactile-card p-3 flex items-center gap-3 ${u.is_me ? "bg-blue-50 border-blue-500" : ""}`}
               data-testid={`rank-${u.rank_position}`}
             >
               <div className="w-9 h-9 rounded-xl flex items-center justify-center border-2 border-slate-900 font-display font-extrabold shrink-0"
@@ -35,18 +35,18 @@ export default function Leaderboard() {
                 {u.name?.[0]?.toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-display font-extrabold text-slate-900 truncate">{u.name} {u.is_me && <span className="text-xs text-violet-600">(você)</span>}</div>
+                <div className="font-display font-extrabold text-slate-900 truncate">{u.name} {u.is_me && <span className="text-xs text-blue-600">(você)</span>}</div>
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] uppercase font-extrabold"
                     style={{ background: u.tier?.color + "22", color: u.tier?.color }}>
                     <TierIcon className="w-3 h-3" strokeWidth={3} />
                     {u.tier?.name}
                   </span>
-                  <span className="inline-flex items-center gap-0.5"><Flame className="w-3 h-3 text-orange-500" strokeWidth={3} /> {u.streak}</span>
+                  <span className="inline-flex items-center gap-0.5"><Flame className="w-3 h-3 text-red-600" strokeWidth={3} /> {u.streak}</span>
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-display font-extrabold text-yellow-600">{u.xp}</div>
+                <div className="font-display font-extrabold text-blue-600">{u.xp}</div>
                 <div className="text-[10px] uppercase tracking-widest font-extrabold text-slate-400">XP</div>
               </div>
             </motion.div>

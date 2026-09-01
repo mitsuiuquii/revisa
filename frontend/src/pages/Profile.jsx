@@ -17,12 +17,12 @@ export default function Profile() {
   if (!user) return null;
 
   const stats = [
-    { label: "XP total", value: user.xp, icon: Zap, color: "#EAB308" },
-    { label: "Moedas", value: user.coins, icon: Coins, color: "#D97706" },
-    { label: "Ofensiva", value: `${user.streak}🔥`, icon: Flame, color: "#F97316" },
-    { label: "Vidas", value: user.lives, icon: Heart, color: "#EF4444" },
-    { label: "Lições", value: user.completed_lessons.length, icon: BookOpen, color: "#3B82F6" },
-    { label: "Medalhas", value: user.achievements.length, icon: Medal, color: "#8B5CF6" },
+    { label: "XP total", value: user.xp, icon: Zap, color: "#1800AD" },
+    { label: "Moedas", value: user.coins, icon: Coins, color: "#FFDE59" },
+    { label: "Ofensiva", value: `${user.streak}🔥`, icon: Flame, color: "#FF3131" },
+    { label: "Vidas", value: user.lives, icon: Heart, color: "#FF3131" },
+    { label: "Lições", value: user.completed_lessons.length, icon: BookOpen, color: "#00BF63" },
+    { label: "Medalhas", value: user.achievements.length, icon: Medal, color: "#8000FF" },
   ];
 
   return (

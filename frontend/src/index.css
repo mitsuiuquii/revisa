@@ -5,13 +5,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Nunito:wght@600;700;800;900&display=swap');
 
 :root {
-    --revisa-navy: #0F172A;
+    /* Brand colors from REVISA Manual */
+    --revisa-navy: #000000;
+    --revisa-primary: #1800AD;
+    --revisa-orange: #FF751F;
+    --revisa-yellow: #FFDE59;
+    --revisa-green: #00BF63;
+    --revisa-red: #FF3131;
+    --revisa-purple: #8000FF;
+    --revisa-white: #FFFFFF;
+    
+    /* Secondary/UI colors */
     --revisa-violet: #8B5CF6;
     --revisa-violet-dark: #7C3AED;
-    --revisa-orange: #F97316;
-    --revisa-yellow: #EAB308;
-    --revisa-green: #22C55E;
-    --revisa-red: #EF4444;
     --revisa-blue: #3B82F6;
     --revisa-pink: #EC4899;
 
@@ -51,13 +57,13 @@ html, body {
 body {
     font-weight: 600;
     overscroll-behavior-y: none;
-    background-color: #FFF7ED;
+    background-color: #FAFAFA;
     background-image:
-        radial-gradient(at 8% 6%, rgba(139, 92, 246, 0.16) 0, transparent 38%),
-        radial-gradient(at 92% 4%, rgba(249, 115, 22, 0.18) 0, transparent 36%),
-        radial-gradient(at 4% 88%, rgba(34, 197, 94, 0.15) 0, transparent 35%),
-        radial-gradient(at 96% 92%, rgba(236, 72, 153, 0.14) 0, transparent 38%),
-        radial-gradient(at 50% 50%, rgba(234, 179, 8, 0.06) 0, transparent 50%);
+        radial-gradient(at 10% 8%, rgba(24, 0, 173, 0.10) 0, transparent 40%),
+        radial-gradient(at 90% 6%, rgba(255, 117, 31, 0.12) 0, transparent 38%),
+        radial-gradient(at 5% 85%, rgba(0, 191, 99, 0.11) 0, transparent 37%),
+        radial-gradient(at 95% 90%, rgba(128, 0, 255, 0.10) 0, transparent 39%),
+        radial-gradient(at 50% 50%, rgba(255, 222, 89, 0.05) 0, transparent 50%);
     background-attachment: fixed;
 }
 
@@ -72,13 +78,13 @@ body {
 }
 
 .btn-primary-revisa {
-    background: var(--revisa-violet);
+    background: linear-gradient(135deg, var(--revisa-purple) 0%, var(--revisa-primary) 100%);
     color: white;
     border: 2px solid var(--revisa-navy);
     box-shadow: 0 4px 0 0 var(--revisa-navy);
     padding: 0.875rem 1.25rem;
 }
-.btn-primary-revisa:hover { background: var(--revisa-violet-dark); }
+.btn-primary-revisa:hover { background: linear-gradient(135deg, var(--revisa-primary) 0%, #1a00cc 100%); }
 .btn-primary-revisa:active { transform: translateY(4px); box-shadow: 0 0 0 0 var(--revisa-navy); }
 .btn-primary-revisa:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -110,16 +116,17 @@ body {
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 
 .trail-connector {
-    width: 4px;
-    height: 28px;
-    background-image: linear-gradient(180deg, var(--revisa-navy) 50%, transparent 50%);
-    background-size: 4px 8px;
-    margin: 0 auto;
+    width: 3px;
+    height: 32px;
+    background: linear-gradient(180deg, var(--revisa-navy) 0%, var(--revisa-navy) 60%, transparent 100%);
+    margin: 4px auto;
+    opacity: 0.6;
+    border-radius: 2px;
 }
 
 @keyframes node-pulse {
-    0%, 100% { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 0 rgba(139, 92, 246, 0.7); }
-    50%      { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 12px rgba(139, 92, 246, 0); }
+    0%, 100% { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 0 rgba(128, 0, 255, 0.6); }
+    50%      { box-shadow: 0 4px 0 0 var(--revisa-navy), 0 0 0 8px rgba(128, 0, 255, 0); }
 }
 .node-current { animation: node-pulse 1.6s infinite; }
 

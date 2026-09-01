@@ -68,7 +68,7 @@ export default function Trail() {
                   const offsets = ["translate-x-0", "translate-x-12", "-translate-x-12", "translate-x-8"];
                   return (
                     <div key={l.id} className="flex flex-col items-center w-full">
-                      {i > 0 && <div className="trail-connector" />}
+                      {i > 0 && <div className="trail-connector" style={{ borderTopColor: subject.color + "44" }} />}
                       <motion.button
                         initial={{ scale: 0.6, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
@@ -78,12 +78,15 @@ export default function Trail() {
                         data-testid={`lesson-node-${g.level}-${i}`}
                         className={`relative ${offsets[i % 4]} group`}
                       >
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 border-slate-900 transition-all
-                          ${isCompleted ? "bg-green-400" : isCurrent ? "bg-violet-500 node-current" : "bg-slate-200"}
-                          ${isLocked ? "opacity-60" : "shadow-[0_4px_0_0_#0F172A] hover:translate-y-0.5 hover:shadow-[0_2px_0_0_#0F172A]"}
-                        `} style={isCurrent ? { background: subject.color } : {}}>
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 transition-all
+                          ${isCompleted ? "text-white" : isCurrent ? "text-white node-current" : "bg-slate-200"}
+                          ${isLocked ? "opacity-60 border-slate-300" : "border-slate-900 shadow-[0_4px_0_0_#0F172A] hover:translate-y-0.5 hover:shadow-[0_2px_0_0_#0F172A]"}
+                        `} style={{
+                          background: isCompleted ? subject.color : isCurrent ? subject.color : undefined,
+                          borderColor: isLocked ? "#CBD5E1" : "#0F172A"
+                        }}>
                           {isCompleted ? (<Check className="w-10 h-10 text-white" strokeWidth={4} />) :
-                            isLocked ? (<Lock className="w-8 h-8 text-slate-500" strokeWidth={3} />) :
+                            isLocked ? (<Lock className="w-8 h-8 text-slate-400" strokeWidth={3} />) :
                             (<Star className="w-9 h-9 text-white" strokeWidth={3} fill="white" />)}
                         </div>
                         <div className="mt-2 text-center font-extrabold text-xs text-slate-700 max-w-[140px] mx-auto leading-tight">

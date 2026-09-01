@@ -2,15 +2,15 @@
 Adaptadas/abreviadas a partir de provas oficiais para fins educacionais."""
 
 SUBJECTS_SEED = [
-    {"name": "Matemática", "icon": "Calculator",   "color": "#3B82F6", "description": "Funções, geometria, álgebra, trigonometria"},
-    {"name": "Biologia",   "icon": "Leaf",         "color": "#86EFAC", "description": "Citologia, genética, ecologia, fisiologia"},
-    {"name": "Geografia",  "icon": "Globe",        "color": "#A855F7", "description": "Física, humana e geopolítica"},
-    {"name": "História",   "icon": "Landmark",     "color": "#EF4444", "description": "Brasil, mundo, contemporânea"},
-    {"name": "Português",  "icon": "BookOpen",     "color": "#F97316", "description": "Gramática, interpretação, redação"},
-    {"name": "Química",    "icon": "FlaskConical", "color": "#84CC16", "description": "Geral, orgânica e físico-química"},
-    {"name": "Física",     "icon": "Atom",         "color": "#1E40AF", "description": "Mecânica, ondas, eletromagnetismo"},
-    {"name": "Literatura", "icon": "BookMarked",   "color": "#EC4899", "description": "Movimentos e autores brasileiros"},
-    {"name": "Inglês",     "icon": "Languages",    "color": "#FACC15", "description": "Reading, gramática e vocabulário"},
+    {"name": "Matemática", "icon": "Calculator",   "color": "#1800AD", "description": "Funções, geometria, álgebra, trigonometria"},
+    {"name": "Biologia",   "icon": "Leaf",         "color": "#00BF63", "description": "Citologia, genética, ecologia, fisiologia"},
+    {"name": "Geografia",  "icon": "Globe",        "color": "#8000FF", "description": "Física, humana e geopolítica"},
+    {"name": "História",   "icon": "Landmark",     "color": "#FF3131", "description": "Brasil, mundo, contemporânea"},
+    {"name": "Português",  "icon": "BookOpen",     "color": "#FF751F", "description": "Gramática, interpretação, redação"},
+    {"name": "Química",    "icon": "FlaskConical", "color": "#FFDE59", "description": "Geral, orgânica e físico-química"},
+    {"name": "Física",     "icon": "Atom",         "color": "#3B82F6", "description": "Mecânica, ondas, eletromagnetismo"},
+    {"name": "Literatura", "icon": "BookMarked",   "color": "#A855F7", "description": "Movimentos e autores brasileiros"},
+    {"name": "Inglês",     "icon": "Languages",    "color": "#FCD34D", "description": "Reading, gramática e vocabulário"},
 ]
 
 LEVELS = ["basico", "intermediario", "avancado", "enem", "fuvest"]

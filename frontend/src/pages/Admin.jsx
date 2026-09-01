@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import * as Icons from "lucide-react";
 
-// ─── Admin credentials (hardcoded — troque conforme necessário) ───────────────
-const ADMIN_PASSWORD = "revisa@admin2025";
+// ─── Admin credentials (REMOVE HARDCODED PASSWORD) ─────────────────────────────
+// Password must be entered by user at login screen
 
 // ─── Tab config ────────────────────────────────────────────────────────────────
 const TABS = [
@@ -36,10 +36,9 @@ function AdminLogin({ onLogin }) {
     setErr("");
     try {
       console.log("🔑 Enviando senha para /admin/login...");
-      const { data } = await api.post("/admin/login", { password: ADMIN_PASSWORD });
+      const { data } = await api.post("/admin/login", { password });
       const token = data.token;
       console.log("✅ Login bem-sucedido! Token recebido");
-      console.log("🔐 Token (primeiros 50 chars):", token.substring(0, 50) + "...");
       
       // Decodifica o token localmente para verificar o payload (sem validar assinatura)
       try {
@@ -65,18 +64,18 @@ function AdminLogin({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0F172A" }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "linear-gradient(135deg, #1800AD 0%, #8000FF 100%)" }}>
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="w-full max-w-sm"
       >
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-3xl bg-violet-500 border-4 border-violet-300 flex items-center justify-center mx-auto mb-4">
-            <ShieldAlert className="w-8 h-8 text-white" strokeWidth={2.5} />
+          <div className="w-16 h-16 rounded-3xl bg-white border-4 border-white flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <ShieldAlert className="w-8 h-8 text-indigo-600" strokeWidth={2.5} />
           </div>
           <h1 className="font-display font-extrabold text-3xl text-white">Painel Admin</h1>
-          <p className="text-slate-400 font-bold mt-1 text-sm">Acesso restrito — REVISA</p>
+          <p className="text-indigo-200 font-bold mt-1 text-sm">Acesso restrito — REVISA</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">

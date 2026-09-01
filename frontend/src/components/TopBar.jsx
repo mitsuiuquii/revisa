@@ -12,7 +12,7 @@ export default function TopBar({ onHelp }) {
       <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0" data-testid="top-logo">
           <div className="font-display font-extrabold text-xl text-slate-900 tracking-tight shrink-0">
-            Revisa<span className="text-violet-500">.</span>
+            Revisa<span style={{ color: "#FF751F" }}>.</span>
           </div>
           <div
             className="flex items-center gap-1 px-2 py-0.5 rounded-full border-2 border-slate-900 text-xs font-extrabold"
@@ -25,9 +25,9 @@ export default function TopBar({ onHelp }) {
           </div>
         </div>
         <div className="flex items-center gap-2 font-display font-extrabold text-sm">
-          <Stat icon={<Flame className="w-4 h-4" strokeWidth={3} />} value={user.streak} color="text-orange-500" testid="top-streak" />
-          <Stat icon={<Coins className="w-4 h-4" strokeWidth={3} fill="currentColor" />} value={user.coins} color="text-yellow-600" testid="top-coins" />
-          <Stat icon={<Zap className="w-4 h-4" strokeWidth={3} fill="currentColor" />} value={user.xp} color="text-yellow-500" testid="top-xp" />
+          <Stat icon={<Flame className="w-4 h-4" strokeWidth={3} />} value={user.streak} color="text-red-600" testid="top-streak" />
+          <Stat icon={<Coins className="w-4 h-4" strokeWidth={3} fill="currentColor" />} value={user.coins} color="text-yellow-500" testid="top-coins" />
+          <Stat icon={<Zap className="w-4 h-4" strokeWidth={3} fill="currentColor" />} value={user.xp} color="text-blue-600" testid="top-xp" />
           <Stat icon={<Heart className="w-4 h-4" strokeWidth={3} fill="currentColor" />} value={user.lives} color="text-red-500" testid="top-lives" />
           {onHelp && (
             <button onClick={onHelp} className="ml-1 p-1 hover:bg-slate-100 rounded-full" data-testid="top-help" title="Como funciona">

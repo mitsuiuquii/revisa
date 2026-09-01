@@ -6,6 +6,17 @@ import { Sparkles, Loader2, Check, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 const SUBJECTS = ["Matemática", "Português", "História", "Geografia", "Biologia", "Química", "Física", "Literatura", "Inglês"];
+const SUBJECT_COLORS = {
+  "Matemática": "#1800AD",
+  "Português": "#FF751F",
+  "História": "#FF3131",
+  "Geografia": "#8000FF",
+  "Biologia": "#00BF63",
+  "Química": "#FFDE59",
+  "Física": "#3B82F6",
+  "Literatura": "#A855F7",
+  "Inglês": "#FCD34D",
+};
 const DIFFICULTIES = [{ id: "facil", label: "Fácil" }, { id: "medio", label: "Médio" }, { id: "dificil", label: "Difícil" }];
 const TOPIC_HINTS = {
   "Matemática": "ex: trigonometria, funções",
@@ -44,7 +55,7 @@ export default function Practice() {
   return (
     <Layout>
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="w-6 h-6 text-violet-500" strokeWidth={3} />
+        <Sparkles className="w-6 h-6 text-purple-600" strokeWidth={3} />
         <h1 className="font-display font-extrabold text-3xl text-slate-900 leading-none">Pratique com IA</h1>
       </div>
       <p className="text-slate-600 font-bold mt-1">Diga o conteúdo e a IA gera uma questão pra você 🚀</p>
@@ -58,7 +69,8 @@ export default function Practice() {
                 key={s}
                 onClick={() => setSubject(s)}
                 data-testid={`practice-subj-${s}`}
-                className={`px-3 py-1.5 rounded-full text-sm font-extrabold border-2 transition-all ${subject === s ? "bg-violet-500 text-white border-slate-900" : "bg-white text-slate-700 border-slate-300 hover:border-violet-400"}`}
+                className={`px-3 py-1.5 rounded-full text-sm font-extrabold border-2 transition-all ${subject === s ? "text-white border-slate-900" : "bg-white text-slate-700 border-slate-300 hover:border-slate-400"}`}
+                style={subject === s ? { background: SUBJECT_COLORS[s] } : {}}
               >
                 {s}
               </button>
@@ -73,7 +85,10 @@ export default function Practice() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder={TOPIC_HINTS[subject]}
-            className="w-full mt-2 px-4 py-3 bg-white border-2 border-slate-300 rounded-2xl font-bold focus:outline-none focus:border-violet-500"
+            className="w-full mt-2 px-4 py-3 bg-white border-2 border-slate-300 rounded-2xl font-bold focus:outline-none transition-colors"
+            style={{ "--focus-color": SUBJECT_COLORS[subject] }}
+            onFocus={(e) => e.target.style.borderColor = SUBJECT_COLORS[subject]}
+            onBlur={(e) => e.target.style.borderColor = "#CBD5E1"}
             data-testid="practice-topic"
             maxLength={80}
           />
@@ -87,7 +102,8 @@ export default function Practice() {
                 key={d.id}
                 onClick={() => setDifficulty(d.id)}
                 data-testid={`practice-diff-${d.id}`}
-                className={`flex-1 py-2 rounded-2xl text-sm font-extrabold border-2 transition-all ${difficulty === d.id ? "bg-orange-500 text-white border-slate-900" : "bg-white text-slate-700 border-slate-300"}`}
+                className={`flex-1 py-2 rounded-2xl text-sm font-extrabold border-2 transition-all ${difficulty === d.id ? "text-white border-slate-900" : "bg-white text-slate-700 border-slate-300"}`}
+                style={difficulty === d.id ? { background: SUBJECT_COLORS[subject] } : {}}
               >
                 {d.label}
               </button>
@@ -108,7 +124,7 @@ export default function Practice() {
             exit={{ opacity: 0 }}
             className="mt-6 tactile-card p-5"
           >
-            <p className="text-xs uppercase tracking-widest font-extrabold text-violet-600 mb-2">{q.source || `${subject} · ${topic}`} · {difficulty}</p>
+            <p className="text-xs uppercase tracking-widest font-extrabold mb-2" style={{ color: SUBJECT_COLORS[subject] }}>{q.source || `${subject} · ${topic}`} · {difficulty}</p>
             <h2 className="font-display font-extrabold text-xl text-slate-900 mb-4">{q.prompt}</h2>
             <div className="space-y-2">
               {q.options.map((opt, i) => {
@@ -117,12 +133,13 @@ export default function Practice() {
                   if (i === q.correct_index) style = "bg-green-100 border-green-500 text-green-800";
                   else if (selected === i) style = "bg-red-100 border-red-500 text-red-800";
                   else style = "bg-white border-slate-200 opacity-60";
-                } else if (selected === i) style = "bg-violet-100 border-violet-500";
+                } else if (selected === i) style = "bg-white border-slate-900";
                 return (
                   <button key={`${q.id}-${i}`}
                     disabled={answered}
                     onClick={() => setSelected(i)}
                     className={`w-full text-left px-3 py-3 rounded-2xl border-2 font-bold transition-all ${style}`}
+                    style={!answered && selected === i ? { borderColor: SUBJECT_COLORS[subject], backgroundColor: SUBJECT_COLORS[subject] + "11" } : {}}
                     data-testid={`practice-opt-${i}`}
                   >
                     {opt}

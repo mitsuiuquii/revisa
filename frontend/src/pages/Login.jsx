@@ -29,7 +29,7 @@ export default function Login() {
     <div className="min-h-screen flex flex-col">
       <div className="max-w-md mx-auto w-full px-6 pt-10">
         <Link to="/" className="font-display font-extrabold text-2xl text-slate-900 tracking-tight">
-          Revisa<span className="text-violet-500">.</span>
+          Revisa<span style={{ color: "#FF751F" }}>.</span>
         </Link>
         <h1 className="font-display font-extrabold text-4xl text-slate-900 mt-8 leading-none">Bem-vindo<br/>de volta</h1>
         <p className="text-slate-600 font-bold mt-2">Bora continuar essa ofensiva?</p>

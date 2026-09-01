@@ -8,9 +8,9 @@ import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 
 const POWERS = [
-  { id: "fifty_fifty", name: "50/50", icon: Users, color: "#3B82F6" },
-  { id: "skip",        name: "Pular", icon: SkipForward, color: "#F97316" },
-  { id: "audience",    name: "Plateia", icon: BarChart3, color: "#22C55E" },
+  { id: "fifty_fifty", name: "50/50", icon: Users, color: "#1800AD" },
+  { id: "skip",        name: "Pular", icon: SkipForward, color: "#FF751F" },
+  { id: "audience",    name: "Plateia", icon: BarChart3, color: "#00BF63" },
 ];
 const POWER_COST = 15;
 
@@ -85,7 +85,7 @@ export default function Lesson() {
     if (selected == null) return;
     setAnswered(true);
     if (selected === q.correct_index) {
-      confetti({ particleCount: 25, spread: 60, origin: { y: 0.7 }, colors: ["#22C55E", "#EAB308", "#8B5CF6"] });
+      confetti({ particleCount: 25, spread: 60, origin: { y: 0.7 }, colors: ["#00BF63", "#FFDE59", "#8000FF"] });
     } else {
       cardRef.current?.classList.add("shake");
       setTimeout(() => cardRef.current?.classList.remove("shake"), 450);
@@ -100,7 +100,7 @@ export default function Lesson() {
       });
       setResult(res);
       await refreshUser();
-      confetti({ particleCount: 180, spread: 90, origin: { y: 0.5 }, colors: ["#8B5CF6", "#F97316", "#EAB308", "#22C55E", "#EF4444"] });
+      confetti({ particleCount: 180, spread: 90, origin: { y: 0.5 }, colors: ["#8000FF", "#FF751F", "#FFDE59", "#00BF63", "#FF3131"] });
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro");
     } finally { setSubmitting(false); }
@@ -139,20 +139,20 @@ export default function Lesson() {
           )}
 
           <div className="grid grid-cols-3 gap-2 mb-6">
+            <div className="tactile-card p-3 bg-blue-50">
+              <Zap className="w-5 h-5 mx-auto text-blue-600" strokeWidth={3} fill="currentColor" />
+              <div className="font-display font-extrabold text-2xl text-blue-700 mt-1">+{result.xp_earned}</div>
+              <div className="text-[9px] uppercase font-extrabold tracking-widest text-blue-700">XP</div>
+            </div>
             <div className="tactile-card p-3 bg-yellow-50">
-              <Zap className="w-5 h-5 mx-auto text-yellow-600" strokeWidth={3} fill="currentColor" />
-              <div className="font-display font-extrabold text-2xl text-yellow-700 mt-1">+{result.xp_earned}</div>
-              <div className="text-[9px] uppercase font-extrabold tracking-widest text-yellow-700">XP</div>
+              <Coins className="w-5 h-5 mx-auto text-yellow-600" strokeWidth={3} fill="currentColor" />
+              <div className="font-display font-extrabold text-2xl text-yellow-700 mt-1">+{result.coins_earned}</div>
+              <div className="text-[9px] uppercase font-extrabold tracking-widest text-yellow-700">moedas</div>
             </div>
-            <div className="tactile-card p-3 bg-amber-50">
-              <Coins className="w-5 h-5 mx-auto text-amber-600" strokeWidth={3} fill="currentColor" />
-              <div className="font-display font-extrabold text-2xl text-amber-700 mt-1">+{result.coins_earned}</div>
-              <div className="text-[9px] uppercase font-extrabold tracking-widest text-amber-700">moedas</div>
-            </div>
-            <div className="tactile-card p-3 bg-orange-50">
-              <Trophy className="w-5 h-5 mx-auto text-orange-600" strokeWidth={3} />
-              <div className="font-display font-extrabold text-2xl text-orange-700 mt-1">{result.new_streak}</div>
-              <div className="text-[9px] uppercase font-extrabold tracking-widest text-orange-700">ofensiva</div>
+            <div className="tactile-card p-3 bg-red-50">
+              <Trophy className="w-5 h-5 mx-auto text-red-600" strokeWidth={3} />
+              <div className="font-display font-extrabold text-2xl text-red-700 mt-1">{result.new_streak}</div>
+              <div className="text-[9px] uppercase font-extrabold tracking-widest text-red-700">ofensiva</div>
             </div>
           </div>
 
@@ -190,9 +190,9 @@ export default function Lesson() {
           <X className="w-5 h-5 text-slate-500" strokeWidth={3} />
         </button>
         <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-          <motion.div className="h-full bg-gradient-to-r from-violet-500 to-violet-600" initial={false} animate={{ width: `${progressPct}%` }} />
+          <motion.div className="h-full bg-gradient-to-r from-blue-500 to-purple-600" initial={false} animate={{ width: `${progressPct}%` }} />
         </div>
-        <div className="flex items-center gap-1 text-amber-600 font-extrabold" data-testid="lesson-coins">
+        <div className="flex items-center gap-1 text-yellow-600 font-extrabold" data-testid="lesson-coins">
           <Coins className="w-4 h-4" strokeWidth={3} fill="currentColor" />
           <span>{user?.coins || 0}</span>
         </div>
@@ -212,7 +212,7 @@ export default function Lesson() {
                 {q.difficulty}
               </span>
               {q.source && (
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
                   {q.source}
                 </span>
               )}
@@ -228,7 +228,7 @@ export default function Lesson() {
                   if (i === q.correct_index) style = "bg-green-100 border-green-500 text-green-800";
                   else if (sel) style = "bg-red-100 border-red-500 text-red-800";
                   else style = "bg-white border-slate-200 opacity-60";
-                } else if (sel) style = "bg-violet-100 border-violet-500 text-violet-800";
+                } else if (sel) style = "bg-blue-100 border-blue-500 text-blue-800";
                 return (
                   <button key={`${q.id}-${i}`}
                     onClick={() => !answered && setSelected(i)}
@@ -239,10 +239,10 @@ export default function Lesson() {
                     <span>{opt}</span>
                     {audienceStats && (
                       <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${audienceStats[i]}%` }} />
+                        <div className="h-full bg-green-500" style={{ width: `${audienceStats[i]}%` }} />
                       </div>
                     )}
-                    {audienceStats && <span className="absolute right-3 top-3 text-xs text-blue-600 font-extrabold">{audienceStats[i]}%</span>}
+                    {audienceStats && <span className="absolute right-3 top-3 text-xs text-green-600 font-extrabold">{audienceStats[i]}%</span>}
                   </button>
                 );
               })}
@@ -272,7 +272,7 @@ export default function Lesson() {
                   >
                     <p.icon className="w-5 h-5" strokeWidth={3} style={{ color: p.color }} />
                     <span className="text-[10px] font-extrabold uppercase">{p.name}</span>
-                    <span className="text-[9px] font-extrabold text-amber-600 flex items-center gap-0.5">
+                    <span className="text-[9px] font-extrabold text-yellow-600 flex items-center gap-0.5">
                       <Coins className="w-2.5 h-2.5" fill="currentColor" /> {POWER_COST}
                     </span>
                   </button>

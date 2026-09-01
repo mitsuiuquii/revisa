@@ -49,7 +49,7 @@ export default function Home() {
           <p className="text-sm uppercase tracking-widest font-extrabold text-slate-500">Olá, {user?.name?.split(" ")[0]} 👋</p>
           <h1 className="font-display font-extrabold text-3xl text-slate-900 leading-none mt-1">Trilhas</h1>
         </div>
-        <button onClick={() => setShowTutorial(true)} className="flex items-center gap-1 text-xs font-extrabold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-full border-2 border-violet-200" data-testid="home-help">
+        <button onClick={() => setShowTutorial(true)} className="flex items-center gap-1 text-xs font-extrabold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-full border-2 border-slate-200 hover:bg-slate-200 transition-colors" data-testid="home-help">
           <HelpCircle className="w-4 h-4" strokeWidth={3} /> Como funciona?
         </button>
       </motion.div>
