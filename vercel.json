@@ -1,3 +1,11 @@
 {
-  "outputDirectory": "frontend/build"
+  "buildCommand": "cd frontend && yarn install && yarn run build",
+  "outputDirectory": "./frontend/build",
+  "env": {
+    "MONGO_URL": "@mongo_url",
+    "DB_NAME": "@db_name",
+    "JWT_SECRET": "@jwt_secret",
+    "EMERGENT_LLM_KEY": "@emergent_llm_key",
+    "CORS_ORIGINS": "@cors_origins"
+  }
 }
