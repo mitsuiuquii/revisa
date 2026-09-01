@@ -1,12 +1,21 @@
 {
-  "buildCommand": "cd backend && pip install -r requirements.txt",
-  "outputDirectory": "backend",
-  "env": {
-    "PYTHONUNBUFFERED": "1"
-  },
+  "framework": "fastapi",
+  "buildCommand": "pip install -r backend/requirements.txt",
+  "outputDirectory": ".",
   "functions": {
-    "api/index.py": {
-      "maxDuration": 60
+    "api/**.py": {
+      "runtime": "python3.11"
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/app.py",
+      "status": 404
+    }
+  ]
 }
