@@ -5,8 +5,9 @@
   "buildCommand": "if [ -f frontend/package.json ]; then yarn --cwd frontend build && rm -rf build && cp -R frontend/build build; else yarn build; fi",
   "outputDirectory": "build",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ],
+  { "source": "/api/(.*)", "destination": "/api/index" },
+  { "source": "/(.*)", "destination": "/index.html" }
+],
   "functions": {
     "api/index.py": {
       "runtime": "python3.11",
