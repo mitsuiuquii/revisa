@@ -8,9 +8,8 @@
   { "source": "/((?!api/).*)", "destination": "/index.html" }
 ],
   "functions": {
-    "api/index.py": {
-      "runtime": "python3.11",
-      "maxDuration": 60
-    }
+  "api/index.py": {
+    "maxDuration": 60
   }
+}
 }
