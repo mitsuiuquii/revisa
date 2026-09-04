@@ -920,12 +920,13 @@ export default function Admin() {
 
   // Sincroniza autenticação com token no localStorage (para recarregamentos de página)
   useEffect(() => {
-    const hasToken = !!localStorage.getItem("revisa_token");
-    if (hasToken && !authed) {
-      setAuthed(true);
-      sessionStorage.setItem("revisa_admin", "1");
-    }
-  }, []);
+  const hasToken = !!localStorage.getItem("revisa_token");
+  if (hasToken && !authed) {
+    setAuthed(true);
+    sessionStorage.setItem("revisa_admin", "1");
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   useEffect(() => {
     if (authed) fetchAll();
